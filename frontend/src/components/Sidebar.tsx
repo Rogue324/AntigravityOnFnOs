@@ -12,6 +12,7 @@ import {
   Sun,
   Moon,
   X,
+  PanelLeftClose,
 } from 'lucide-react';
 import type { ActiveTab, AgyStatus, SessionSummary, ThemeMode } from '../types';
 
@@ -29,6 +30,8 @@ interface SidebarProps {
   onLogout: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
+  desktopCollapsed: boolean;
+  onCollapseDesktop: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -45,9 +48,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
   mobileOpen,
   onCloseMobile,
+  desktopCollapsed,
+  onCollapseDesktop,
 }) => {
   const sidebarBody = (
-    <aside className="flex h-full w-72 max-w-[82vw] shrink-0 flex-col border-r border-slate-200 bg-white md:w-64 dark:border-slate-800/90 dark:bg-slate-900/95">
+    <aside className="flex h-full w-72 max-w-[82vw] shrink-0 flex-col border-r border-slate-200 bg-white lg:w-64 dark:border-slate-800/90 dark:bg-slate-900/95">
       {/* Brand */}
       <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-3.5 dark:border-slate-800">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white p-1 shadow-xs dark:border-slate-700 dark:bg-slate-800">
@@ -62,9 +67,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={onCloseMobile}
           aria-label="关闭菜单"
-          className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 md:hidden dark:hover:bg-slate-800 dark:hover:text-white"
+          className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:hidden dark:hover:bg-slate-800 dark:hover:text-white"
         >
           <X className="h-4 w-4" />
+        </button>
+        <button
+          onClick={onCollapseDesktop}
+          title="收起侧边栏"
+          className="hidden rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:inline-flex dark:hover:bg-slate-800 dark:hover:text-white"
+        >
+          <PanelLeftClose className="h-4 w-4" />
         </button>
       </div>
 
@@ -228,12 +240,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <div className="hidden h-full md:flex">{sidebarBody}</div>
+      {/* Desktop sidebar (>= 1024px unless collapsed) */}
+      {!desktopCollapsed && <div className="hidden h-full lg:flex">{sidebarBody}</div>}
 
-      {/* Mobile slide-over drawer */}
+      {/* Mobile / narrow-window slide-over drawer (< 1024px) */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 flex md:hidden">
+        <div className="fixed inset-0 z-40 flex lg:hidden">
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-xs"
             onClick={onCloseMobile}

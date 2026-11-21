@@ -287,8 +287,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <span className="truncate font-mono">{workspace}</span>
           </button>
 
-          {/* Mobile compact controls */}
-          <div className="ml-auto flex items-center gap-1.5 md:hidden">
+          {/* Mobile / narrow-window compact controls */}
+          <div className="ml-auto flex items-center gap-1.5 lg:hidden">
             <button
               onClick={() => setMobileConfigOpen((v) => !v)}
               className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs transition ${
@@ -309,11 +309,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </button>
           </div>
 
-          {/* Extra dirs & model/effort/permission controls: always inline on desktop, collapsible on mobile */}
+          {/* Extra dirs & model/effort/permission controls: always inline on desktop, collapsible on mobile/narrow */}
           <div
             className={`${
               mobileConfigOpen ? 'mt-2 flex w-full flex-wrap items-center gap-2 border-t border-slate-200 pt-2 dark:border-slate-800' : 'hidden'
-            } md:mt-0 md:flex md:w-auto md:flex-1 md:flex-wrap md:items-center md:gap-2 md:border-t-0 md:pt-0`}
+            } lg:mt-0 lg:flex lg:w-auto lg:flex-1 lg:flex-wrap lg:items-center lg:gap-2 lg:border-t-0 lg:pt-0`}
           >
             {extraDirs.map((dir) => (
               <span
@@ -442,7 +442,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               {/* Handoff to Terminal (desktop) */}
               <button
                 onClick={() => onOpenInTerminal(workspace, session?.conversation_id)}
-                className="hidden items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 md:flex dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+                className="hidden items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 lg:flex dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
                 title="在内置终端中继续当前工作区或会话"
               >
                 <Terminal className="h-3.5 w-3.5" />
