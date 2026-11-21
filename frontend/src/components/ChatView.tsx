@@ -20,6 +20,7 @@ import {
   Loader2,
   Gauge,
   RefreshCw,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { api, streamSessionChat } from '../api/client';
 import type {
@@ -141,6 +142,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [streaming, setStreaming] = useState(false);
   const [draftMsg, setDraftMsg] = useState<ChatMessage | null>(null);
   const [pickerMode, setPickerMode] = useState<'workspace' | 'extra' | null>(null);
+  const [mobileConfigOpen, setMobileConfigOpen] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -274,155 +276,186 @@ export const ChatView: React.FC<ChatViewProps> = ({
   return (
     <div className="flex h-full flex-col bg-slate-50 dark:bg-slate-950">
       {/* Top workspace & runtime toolbar */}
-      <header className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white/90 px-4 py-2.5 backdrop-blur dark:border-slate-800/90 dark:bg-slate-900/70">
-        <button
-          onClick={() => setPickerMode('workspace')}
-          className="flex max-w-xs items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 transition hover:border-indigo-500/60 dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-200"
-          title="切换工作区目录 (cwd)"
-        >
-          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
-          <span className="truncate font-mono">{workspace}</span>
-        </button>
-
-        {extraDirs.map((dir) => (
-          <span
-            key={dir}
-            className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 px-2 py-1 font-mono text-[11px] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
-          >
-            <span className="max-w-[140px] truncate">+ {dir}</span>
-            <button
-              onClick={() =>
-                updateMeta({ extra_dirs: extraDirs.filter((d) => d !== dir) })
-              }
-              className="text-slate-400 hover:text-rose-500"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
-
-        <button
-          onClick={() => setPickerMode('extra')}
-          className="flex items-center gap-1 rounded-lg border border-dashed border-slate-300 px-2 py-1.5 text-[11px] text-slate-500 transition hover:border-slate-400 hover:text-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
-          title="添加附加上下文目录 (--add-dir)"
-        >
-          <Plus className="h-3 w-3" />
-          <span>附加目录</span>
-        </button>
-
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {/* Model selector */}
-          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950">
-            <Cpu className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            {models.length > 0 ? (
-              <select
-                value={model}
-                onChange={(e) => updateMeta({ model: e.target.value })}
-                title="选择模型"
-                className="max-w-[180px] bg-transparent text-xs text-slate-700 focus:outline-none dark:text-slate-200"
-              >
-                <option value="" className="bg-white dark:bg-slate-900">
-                  默认模型 (CLI 自动)
-                </option>
-                {models.map((m) => (
-                  <option key={m.id} value={m.id} className="bg-white dark:bg-slate-900">
-                    {m.label}
-                  </option>
-                ))}
-                {model && !models.some((m) => m.id === model) && (
-                  <option value={model} className="bg-white dark:bg-slate-900">
-                    {model}
-                  </option>
-                )}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => updateMeta({ model: e.target.value })}
-                placeholder="默认模型"
-                className="w-28 bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder-slate-500"
-              />
-            )}
-            <button
-              onClick={onRefreshModels}
-              title="刷新可用模型列表 (agy models)"
-              className="rounded p-0.5 text-slate-400 hover:text-indigo-500"
-            >
-              <RefreshCw className="h-3 w-3" />
-            </button>
-          </div>
-
-          {/* Reasoning Effort selector */}
-          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950">
-            <Gauge className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <select
-              value={effort}
-              onChange={(e) => updateMeta({ effort: e.target.value })}
-              title="思考强度 (--effort)"
-              className="bg-transparent text-xs text-slate-700 focus:outline-none dark:text-slate-200"
-            >
-              <option value="" className="bg-white dark:bg-slate-900">
-                思考: 默认
-              </option>
-              <option value="low" className="bg-white dark:bg-slate-900">
-                思考: 低 (low)
-              </option>
-              <option value="medium" className="bg-white dark:bg-slate-900">
-                思考: 中 (medium)
-              </option>
-              <option value="high" className="bg-white dark:bg-slate-900">
-                思考: 高 (high)
-              </option>
-              <option value="xhigh" className="bg-white dark:bg-slate-900">
-                思考: 极高 (xhigh)
-              </option>
-              <option value="max" className="bg-white dark:bg-slate-900">
-                思考: 最大 (max)
-              </option>
-            </select>
-          </div>
-
-          {/* Permission Mode */}
-          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950">
-            <Shield className="h-3.5 w-3.5 text-slate-400" />
-            <select
-              value={permMode}
-              onChange={(e) => updateMeta({ permission_mode: e.target.value })}
-              className="bg-transparent text-xs text-slate-700 focus:outline-none dark:text-slate-200"
-            >
-              <option value="default" className="bg-white dark:bg-slate-900">
-                标准模式 (default)
-              </option>
-              <option value="accept-edits" className="bg-white dark:bg-slate-900">
-                自动接受编辑 (accept-edits)
-              </option>
-              <option value="plan" className="bg-white dark:bg-slate-900">
-                仅规划 (plan)
-              </option>
-              {settings?.allow_dangerous_skip && (
-                <option value="bypass" className="bg-white dark:bg-slate-900">
-                  跳过权限确认 (危险)
-                </option>
-              )}
-            </select>
-          </div>
-
-          {/* Handoff to Terminal */}
+      <header className="border-b border-slate-200 bg-white/90 px-3 py-2 backdrop-blur sm:px-4 sm:py-2.5 dark:border-slate-800/90 dark:bg-slate-900/70">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => onOpenInTerminal(workspace, session?.conversation_id)}
-            className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
-            title="在内置终端中继续当前工作区或会话"
+            onClick={() => setPickerMode('workspace')}
+            className="flex min-w-0 max-w-[56vw] items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 transition hover:border-indigo-500/60 sm:max-w-xs dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-200"
+            title="切换工作区目录 (cwd)"
           >
-            <Terminal className="h-3.5 w-3.5" />
-            <span>终端继续</span>
+            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
+            <span className="truncate font-mono">{workspace}</span>
           </button>
+
+          {/* Mobile compact controls */}
+          <div className="ml-auto flex items-center gap-1.5 md:hidden">
+            <button
+              onClick={() => setMobileConfigOpen((v) => !v)}
+              className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs transition ${
+                mobileConfigOpen
+                  ? 'border-indigo-400 bg-indigo-50 text-indigo-700 dark:border-indigo-500/50 dark:bg-indigo-500/15 dark:text-indigo-300'
+                  : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
+              }`}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span>参数</span>
+            </button>
+            <button
+              onClick={() => onOpenInTerminal(workspace, session?.conversation_id)}
+              className="flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300"
+              title="在内置终端中继续"
+            >
+              <Terminal className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Extra dirs & model/effort/permission controls: always inline on desktop, collapsible on mobile */}
+          <div
+            className={`${
+              mobileConfigOpen ? 'mt-2 flex w-full flex-wrap items-center gap-2 border-t border-slate-200 pt-2 dark:border-slate-800' : 'hidden'
+            } md:mt-0 md:flex md:w-auto md:flex-1 md:flex-wrap md:items-center md:gap-2 md:border-t-0 md:pt-0`}
+          >
+            {extraDirs.map((dir) => (
+              <span
+                key={dir}
+                className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 px-2 py-1 font-mono text-[11px] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+              >
+                <span className="max-w-[140px] truncate">+ {dir}</span>
+                <button
+                  onClick={() =>
+                    updateMeta({ extra_dirs: extraDirs.filter((d) => d !== dir) })
+                  }
+                  className="text-slate-400 hover:text-rose-500"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+
+            <button
+              onClick={() => setPickerMode('extra')}
+              className="flex items-center gap-1 rounded-lg border border-dashed border-slate-300 px-2 py-1.5 text-[11px] text-slate-500 transition hover:border-slate-400 hover:text-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
+              title="添加附加上下文目录 (--add-dir)"
+            >
+              <Plus className="h-3 w-3" />
+              <span>附加目录</span>
+            </button>
+
+            <div className="flex w-full flex-wrap items-center gap-2 md:ml-auto md:w-auto">
+              {/* Model selector */}
+              <div className="flex min-w-0 flex-1 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs md:flex-initial dark:border-slate-800 dark:bg-slate-950">
+                <Cpu className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                {models.length > 0 ? (
+                  <select
+                    value={model}
+                    onChange={(e) => updateMeta({ model: e.target.value })}
+                    title="选择模型"
+                    className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 focus:outline-none md:max-w-[180px] dark:text-slate-200"
+                  >
+                    <option value="" className="bg-white dark:bg-slate-900">
+                      默认模型 (CLI 自动)
+                    </option>
+                    {models.map((m) => (
+                      <option key={m.id} value={m.id} className="bg-white dark:bg-slate-900">
+                        {m.label}
+                      </option>
+                    ))}
+                    {model && !models.some((m) => m.id === model) && (
+                      <option value={model} className="bg-white dark:bg-slate-900">
+                        {model}
+                      </option>
+                    )}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={model}
+                    onChange={(e) => updateMeta({ model: e.target.value })}
+                    placeholder="默认模型"
+                    className="w-full min-w-0 bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-none md:w-28 dark:text-slate-200 dark:placeholder-slate-500"
+                  />
+                )}
+                <button
+                  onClick={onRefreshModels}
+                  title="刷新可用模型列表 (agy models)"
+                  className="rounded p-0.5 text-slate-400 hover:text-indigo-500"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </button>
+              </div>
+
+              {/* Reasoning Effort selector */}
+              <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950">
+                <Gauge className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <select
+                  value={effort}
+                  onChange={(e) => updateMeta({ effort: e.target.value })}
+                  title="思考强度 (--effort)"
+                  className="bg-transparent text-xs text-slate-700 focus:outline-none dark:text-slate-200"
+                >
+                  <option value="" className="bg-white dark:bg-slate-900">
+                    思考: 默认
+                  </option>
+                  <option value="low" className="bg-white dark:bg-slate-900">
+                    思考: 低 (low)
+                  </option>
+                  <option value="medium" className="bg-white dark:bg-slate-900">
+                    思考: 中 (medium)
+                  </option>
+                  <option value="high" className="bg-white dark:bg-slate-900">
+                    思考: 高 (high)
+                  </option>
+                  <option value="xhigh" className="bg-white dark:bg-slate-900">
+                    思考: 极高 (xhigh)
+                  </option>
+                  <option value="max" className="bg-white dark:bg-slate-900">
+                    思考: 最大 (max)
+                  </option>
+                </select>
+              </div>
+
+              {/* Permission Mode */}
+              <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950">
+                <Shield className="h-3.5 w-3.5 text-slate-400" />
+                <select
+                  value={permMode}
+                  onChange={(e) => updateMeta({ permission_mode: e.target.value })}
+                  className="bg-transparent text-xs text-slate-700 focus:outline-none dark:text-slate-200"
+                >
+                  <option value="default" className="bg-white dark:bg-slate-900">
+                    标准模式 (default)
+                  </option>
+                  <option value="accept-edits" className="bg-white dark:bg-slate-900">
+                    自动接受编辑 (accept-edits)
+                  </option>
+                  <option value="plan" className="bg-white dark:bg-slate-900">
+                    仅规划 (plan)
+                  </option>
+                  {settings?.allow_dangerous_skip && (
+                    <option value="bypass" className="bg-white dark:bg-slate-900">
+                      跳过权限确认 (危险)
+                    </option>
+                  )}
+                </select>
+              </div>
+
+              {/* Handoff to Terminal (desktop) */}
+              <button
+                onClick={() => onOpenInTerminal(workspace, session?.conversation_id)}
+                className="hidden items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 md:flex dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+                title="在内置终端中继续当前工作区或会话"
+              >
+                <Terminal className="h-3.5 w-3.5" />
+                <span>终端继续</span>
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
       {/* Setup warning banner if agy missing or unauthenticated */}
       {agyStatus && (!agyStatus.installed || !agyStatus.authenticated) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 sm:px-4 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
             {!agyStatus.installed ? (
@@ -450,10 +483,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
       )}
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <div className="mx-auto max-w-4xl space-y-5">
+      <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-6">
+        <div className="mx-auto max-w-4xl space-y-4 sm:space-y-5">
           {messages.length === 0 && !draftMsg ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="flex flex-col items-center justify-center py-10 text-center sm:py-16">
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 ring-1 ring-indigo-200 dark:bg-gradient-to-br dark:from-indigo-500/20 dark:to-violet-600/20 dark:ring-indigo-500/30">
                 <Sparkles className="h-7 w-7 text-indigo-600 dark:text-indigo-400" />
               </div>
@@ -461,7 +494,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 开始与 Antigravity 对话
               </h2>
               <p className="mt-1.5 max-w-md text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                当前工作区：<span className="font-mono text-slate-700 dark:text-slate-300">{workspace}</span>
+                当前工作区：<span className="break-all font-mono text-slate-700 dark:text-slate-300">{workspace}</span>
                 <br />
                 支持直接分析 NAS 共享目录中的代码与文档，也可随时一键切至内置终端使用完整 TUI。
               </p>
@@ -490,11 +523,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {msg.role === 'user' ? (
-                  <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-indigo-600 px-4 py-2.5 text-sm whitespace-pre-wrap text-white shadow">
+                  <div className="max-w-[88%] rounded-2xl rounded-tr-sm bg-indigo-600 px-3.5 py-2.5 text-sm whitespace-pre-wrap text-white shadow sm:max-w-[82%] sm:px-4">
                     {msg.content}
                   </div>
                 ) : (
-                  <div className="w-full max-w-[92%] rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-xs dark:border-slate-800/90 dark:bg-slate-900/80 dark:text-slate-100">
+                  <div className="w-full max-w-full rounded-2xl border border-slate-200 bg-white p-3.5 text-sm text-slate-800 shadow-xs sm:max-w-[92%] sm:p-4 dark:border-slate-800/90 dark:bg-slate-900/80 dark:text-slate-100">
                     {msg.thinking && (
                       <ThinkingBlock
                         thinking={msg.thinking}
@@ -511,7 +544,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     )}
 
                     {msg.content ? (
-                      <div className="chat-markdown">
+                      <div className="chat-markdown min-w-0 overflow-x-auto">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                       </div>
                     ) : msg.id.startsWith('stream-') && !msg.error ? (
@@ -528,7 +561,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     )}
 
                     {msg.usage && (
-                      <div className="mt-3 flex items-center gap-3 border-t border-slate-200 pt-2 text-[11px] text-slate-400 dark:border-slate-800/80 dark:text-slate-500">
+                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-200 pt-2 text-[11px] text-slate-400 dark:border-slate-800/80 dark:text-slate-500">
                         <span>输入: {msg.usage.input_tokens ?? 0}</span>
                         <span>输出: {msg.usage.output_tokens ?? 0}</span>
                         <span>总计: {msg.usage.total_tokens ?? 0} tokens</span>
@@ -544,8 +577,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
       </div>
 
       {/* Input composer */}
-      <div className="border-t border-slate-200 bg-white/90 p-4 dark:border-slate-800/90 dark:bg-slate-900/70">
-        <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-xs focus-within:border-indigo-500 dark:border-slate-700/80 dark:bg-slate-950">
+      <div className="border-t border-slate-200 bg-white/90 p-2.5 sm:p-4 dark:border-slate-800/90 dark:bg-slate-900/70">
+        <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-slate-300 bg-white p-1.5 shadow-xs focus-within:border-indigo-500 sm:p-2 dark:border-slate-700/80 dark:bg-slate-950">
           <textarea
             rows={1}
             value={input}
@@ -556,13 +589,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 handleSend();
               }
             }}
-            placeholder="输入指令或问题（Enter 发送，Shift+Enter 换行）..."
-            className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2.5 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none dark:text-white dark:placeholder-slate-500"
+            placeholder="输入指令或问题..."
+            className="max-h-36 min-h-[40px] flex-1 resize-none bg-transparent px-2.5 py-2 text-base text-slate-900 placeholder-slate-400 focus:outline-none sm:text-sm dark:text-white dark:placeholder-slate-500"
           />
           {streaming ? (
             <button
               onClick={handleStop}
-              className="flex h-10 items-center gap-1.5 rounded-xl bg-rose-600 px-3.5 text-xs font-medium text-white transition hover:bg-rose-500"
+              className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-rose-600 px-3 text-xs font-medium text-white transition hover:bg-rose-500 sm:px-3.5"
             >
               <Square className="h-3.5 w-3.5 fill-current" />
               <span>停止</span>
@@ -571,7 +604,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <button
               onClick={() => handleSend()}
               disabled={!input.trim()}
-              className="flex h-10 items-center gap-1.5 rounded-xl bg-indigo-600 px-4 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 sm:px-4"
             >
               <Send className="h-3.5 w-3.5" />
               <span>发送</span>

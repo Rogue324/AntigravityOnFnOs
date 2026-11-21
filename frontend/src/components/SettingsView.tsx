@@ -158,23 +158,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 p-6 dark:bg-slate-950">
-      <div className="mx-auto max-w-3xl space-y-6 pb-12">
-        <div className="flex items-center justify-between">
+    <div className="h-full overflow-y-auto bg-slate-50 p-4 sm:p-6 dark:bg-slate-950">
+      <div className="mx-auto max-w-3xl space-y-5 pb-12 sm:space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-white">设置中心</h1>
+            <h1 className="text-lg font-semibold text-slate-900 sm:text-xl dark:text-white">设置中心</h1>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               管理 Antigravity CLI 运行环境、网络代理、默认工作区与安全策略
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-end gap-3">
             {saveMsg && (
               <span className="text-xs text-emerald-600 dark:text-emerald-400">{saveMsg}</span>
             )}
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50 sm:w-auto"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               <span>保存全部设置</span>

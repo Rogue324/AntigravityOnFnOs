@@ -152,11 +152,11 @@ export const DirPickerModal: React.FC<DirPickerModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3 dark:border-slate-800 dark:bg-slate-950/60">
+        <div className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 dark:border-slate-800 dark:bg-slate-950/60">
           <div className="truncate font-mono text-xs text-slate-500 dark:text-slate-400">
             当前选中：<span className="text-slate-800 dark:text-slate-200">{data?.path || manualPath}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <button
               onClick={onClose}
               className="rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"

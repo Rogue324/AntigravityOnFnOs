@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Menu, Plus, Sun, Moon } from 'lucide-react';
 import { api } from './api/client';
 import { AuthGate } from './components/AuthGate';
 import { Sidebar } from './components/Sidebar';
@@ -31,6 +32,7 @@ export default function App() {
   const [theme, setTheme] = useState<ThemeMode>(readInitialTheme);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [agyStatus, setAgyStatus] = useState<AgyStatus | null>(null);
@@ -151,6 +153,7 @@ export default function App() {
       setActiveSession(created);
       await refreshSessionsList();
       setActiveTab('chat');
+      setMobileMenuOpen(false);
       return created;
     } catch {
       return null;
@@ -188,6 +191,7 @@ export default function App() {
       nonce: Date.now(),
     });
     setActiveTab('terminal');
+    setMobileMenuOpen(false);
   };
 
   const handleLogout = async () => {
@@ -197,6 +201,7 @@ export default function App() {
       setAuth({ initialized: true, authenticated: false });
       setActiveSession(null);
       setSessions([]);
+      setMobileMenuOpen(false);
     }
   };
 
@@ -219,23 +224,77 @@ export default function App() {
     );
   }
 
+  const mobileTitle =
+    activeTab === 'chat'
+      ? activeSession?.title || 'Antigravity 对话'
+      : activeTab === 'terminal'
+      ? '内置 Web 终端'
+      : '设置中心';
+
   return (
-    <div className="flex h-full w-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-slate-50 text-slate-900 md:flex-row dark:bg-slate-950 dark:text-slate-100">
+      {/* Mobile top bar */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5 md:hidden dark:border-slate-800 dark:bg-slate-900">
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          aria-label="打开菜单"
+          className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+
+        <img src="./icon.png" alt="Antigravity" className="h-5 w-5 shrink-0 object-contain" />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 dark:text-white">
+          {mobileTitle}
+        </span>
+
+        {activeTab === 'chat' && (
+          <button
+            onClick={handleNewSession}
+            title="新建对话"
+            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+        )}
+
+        <button
+          onClick={toggleTheme}
+          title={theme === 'light' ? '深色模式' : '浅色模式'}
+          className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          {theme === 'light' ? (
+            <Moon className="h-4 w-4" />
+          ) : (
+            <Sun className="h-4 w-4 text-amber-400" />
+          )}
+        </button>
+      </div>
+
+      {/* Desktop persistent sidebar + Mobile slide-over drawer */}
       <Sidebar
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          setMobileMenuOpen(false);
+        }}
         sessions={sessions}
         activeSessionId={activeSession?.id || null}
-        onSelectSession={handleSelectSession}
+        onSelectSession={(id) => {
+          handleSelectSession(id);
+          setMobileMenuOpen(false);
+        }}
         onNewSession={handleNewSession}
         onDeleteSession={handleDeleteSession}
         agyStatus={agyStatus}
         theme={theme}
         onToggleTheme={toggleTheme}
         onLogout={handleLogout}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
       />
 
-      <main className="min-w-0 flex-1 overflow-hidden">
+      <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
         {activeTab === 'chat' && (
           <ChatView
             session={activeSession}

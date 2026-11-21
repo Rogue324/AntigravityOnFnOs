@@ -75,9 +75,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const isMobile = window.innerWidth < 768;
     const term = new XTerm({
       cursorBlink: true,
-      fontSize: 13.5,
+      fontSize: isMobile ? 12 : 13.5,
       fontFamily:
         'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
       theme: theme === 'dark' ? DARK_XTERM_THEME : LIGHT_XTERM_THEME,
@@ -187,55 +188,63 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     };
   }, [mode, workspace, conversationId, reconnectNonce]);
 
+  const sendKey = (data: string) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'input', data }));
+      termRef.current?.focus();
+    }
+  };
+
   return (
     <div className="flex h-full flex-col bg-slate-50 dark:bg-[#090d16]">
       {/* Toolbar */}
-      <header className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/90">
+      <header className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-2 sm:gap-2 sm:px-4 sm:py-2.5 dark:border-slate-800 dark:bg-slate-900/90">
         <div className="flex items-center rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs dark:border-slate-800 dark:bg-slate-950">
           <button
             onClick={() => setMode('agy')}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition ${
+            className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium transition sm:gap-1.5 sm:px-2.5 ${
               mode === 'agy'
                 ? 'bg-indigo-600 text-white'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             <Sparkles className="h-3.5 w-3.5" />
-            <span>Antigravity TUI</span>
+            <span>TUI</span>
           </button>
           <button
             onClick={() => {
               setConversationId('');
               setMode('shell');
             }}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition ${
+            className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium transition sm:gap-1.5 sm:px-2.5 ${
               mode === 'shell'
                 ? 'bg-indigo-600 text-white'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             <Terminal className="h-3.5 w-3.5" />
-            <span>系统 Shell</span>
+            <span>Shell</span>
           </button>
         </div>
 
         <button
           onClick={() => setPickerOpen(true)}
-          className="flex max-w-xs items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 hover:border-indigo-500/60 dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-200"
+          className="flex min-w-0 max-w-[42vw] items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 hover:border-indigo-500/60 sm:max-w-xs sm:px-2.5 dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-200"
         >
           <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
           <span className="truncate font-mono">{workspace}</span>
         </button>
 
         {conversationId && (
-          <span className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 font-mono text-[11px] text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
+          <span className="hidden rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 font-mono text-[11px] text-indigo-700 sm:inline-block dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
             会话: {conversationId.slice(0, 10)}…
           </span>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
           <span
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+            className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium sm:px-2.5 ${
               connState === 'connected'
                 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
                 : connState === 'connecting'
@@ -252,33 +261,37 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   : 'bg-rose-500 dark:bg-rose-400'
               }`}
             />
-            {connState === 'connected'
-              ? '已连接'
-              : connState === 'connecting'
-              ? '连接中'
-              : '已断开'}
+            <span className="hidden sm:inline">
+              {connState === 'connected'
+                ? '已连接'
+                : connState === 'connecting'
+                ? '连接中'
+                : '已断开'}
+            </span>
           </span>
 
           <button
             onClick={() => termRef.current?.clear()}
-            className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+            title="清屏"
+            className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900 sm:px-2.5 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            <span>清屏</span>
+            <span className="hidden sm:inline">清屏</span>
           </button>
 
           <button
             onClick={() => setReconnectNonce((n) => n + 1)}
-            className="flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 hover:bg-indigo-600 hover:text-white dark:bg-slate-800 dark:text-slate-200"
+            title="重连"
+            className="flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1.5 text-xs text-slate-700 hover:bg-indigo-600 hover:text-white sm:px-2.5 dark:bg-slate-800 dark:text-slate-200"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            <span>重连</span>
+            <span className="hidden sm:inline">重连</span>
           </button>
         </div>
       </header>
 
       {/* Helpful tip for NAS headless OAuth */}
-      <div className="flex items-center gap-2 border-b border-slate-200/80 bg-slate-100/70 px-4 py-1.5 text-[11px] text-slate-600 dark:border-slate-800/70 dark:bg-slate-900/40 dark:text-slate-400">
+      <div className="hidden items-center gap-2 border-b border-slate-200/80 bg-slate-100/70 px-4 py-1.5 text-[11px] text-slate-600 sm:flex dark:border-slate-800/70 dark:bg-slate-900/40 dark:text-slate-400">
         <Info className="h-3.5 w-3.5 shrink-0 text-indigo-500 dark:text-indigo-400" />
         <span>
           首次登录或使用 <code className="text-slate-800 dark:text-slate-300">/mcp</code>、
@@ -288,7 +301,29 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       </div>
 
       {/* XTerm mount */}
-      <div ref={containerRef} className="min-h-0 flex-1 p-2" />
+      <div ref={containerRef} className="min-h-0 flex-1 p-1.5 sm:p-2" />
+
+      {/* Mobile terminal quick-key bar */}
+      <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-slate-200 bg-white px-2 py-1.5 md:hidden dark:border-slate-800 dark:bg-slate-900">
+        {[
+          { label: 'Esc', data: '\x1b' },
+          { label: 'Tab', data: '\t' },
+          { label: 'Ctrl+C', data: '\x03' },
+          { label: '↑', data: '\x1b[A' },
+          { label: '↓', data: '\x1b[B' },
+          { label: '←', data: '\x1b[D' },
+          { label: '→', data: '\x1b[C' },
+          { label: 'Enter', data: '\r' },
+        ].map((k) => (
+          <button
+            key={k.label}
+            onClick={() => sendKey(k.data)}
+            className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-xs text-slate-700 active:bg-indigo-600 active:text-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          >
+            {k.label}
+          </button>
+        ))}
+      </div>
 
       <DirPickerModal
         open={pickerOpen}
