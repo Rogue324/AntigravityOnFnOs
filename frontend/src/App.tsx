@@ -11,6 +11,7 @@ import type {
   AppSettings,
   AuthStatus,
   ChatSession,
+  ModelOption,
   SessionSummary,
   TerminalLaunchRequest,
   ThemeMode,
@@ -33,6 +34,7 @@ export default function App() {
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [agyStatus, setAgyStatus] = useState<AgyStatus | null>(null);
+  const [models, setModels] = useState<ModelOption[]>([]);
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
@@ -61,6 +63,17 @@ export default function App() {
     }
   }, []);
 
+  const refreshModels = useCallback(async () => {
+    try {
+      const res = await api.agyModels();
+      if (Array.isArray(res.models)) {
+        setModels(res.models);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const loadAppData = useCallback(async () => {
     try {
       const [cfg, agySt, sessList] = await Promise.all([
@@ -71,6 +84,9 @@ export default function App() {
       setSettings(cfg);
       setAgyStatus(agySt);
       setSessions(sessList.sessions);
+      if (agySt.installed) {
+        refreshModels();
+      }
 
       if (sessList.sessions.length > 0) {
         const first = await api.getSession(sessList.sessions[0].id);
@@ -81,7 +97,7 @@ export default function App() {
     } catch {
       loadAuth();
     }
-  }, [loadAuth]);
+  }, [loadAuth, refreshModels]);
 
   useEffect(() => {
     loadAuth();
@@ -92,6 +108,19 @@ export default function App() {
       loadAppData();
     }
   }, [auth?.authenticated, loadAppData]);
+
+  useEffect(() => {
+    if (!auth?.authenticated) return;
+    api
+      .agyStatus()
+      .then((st) => {
+        setAgyStatus(st);
+        if (st.installed && models.length === 0) {
+          refreshModels();
+        }
+      })
+      .catch(() => {});
+  }, [auth?.authenticated, activeTab, models.length, refreshModels]);
 
   const refreshSessionsList = useCallback(async () => {
     try {
@@ -116,6 +145,7 @@ export default function App() {
       const created = await api.createSession({
         workspace: settings?.default_workspace,
         model: settings?.default_model,
+        effort: settings?.default_effort,
         permission_mode: settings?.default_permission_mode,
       });
       setActiveSession(created);
@@ -211,6 +241,8 @@ export default function App() {
             session={activeSession}
             settings={settings}
             agyStatus={agyStatus}
+            models={models}
+            onRefreshModels={refreshModels}
             onSessionUpdated={handleSessionUpdated}
             onCreateSession={handleNewSession}
             onOpenInTerminal={handleOpenInTerminal}
@@ -228,6 +260,7 @@ export default function App() {
               try {
                 const st = await api.agyStatus();
                 setAgyStatus(st);
+                if (st.installed) refreshModels();
               } catch {
                 // ignore
               }
@@ -239,8 +272,12 @@ export default function App() {
           <SettingsView
             settings={settings}
             agyStatus={agyStatus}
+            models={models}
             onSettingsSaved={setSettings}
-            onAgyStatusUpdated={setAgyStatus}
+            onAgyStatusUpdated={(st) => {
+              setAgyStatus(st);
+              if (st.installed) refreshModels();
+            }}
             onGoToTerminal={() => setActiveTab('terminal')}
           />
         )}

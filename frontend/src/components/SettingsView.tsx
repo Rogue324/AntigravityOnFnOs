@@ -13,12 +13,13 @@ import {
   Terminal,
 } from 'lucide-react';
 import { api, streamAgyInstall } from '../api/client';
-import type { AgyStatus, AppSettings, PermissionMode, ProxyTestResult } from '../types';
+import type { AgyStatus, AppSettings, ModelOption, PermissionMode, ProxyTestResult } from '../types';
 import { DirPickerModal } from './DirPickerModal';
 
 interface SettingsViewProps {
   settings: AppSettings | null;
   agyStatus: AgyStatus | null;
+  models: ModelOption[];
   onSettingsSaved: (s: AppSettings) => void;
   onAgyStatusUpdated: (st: AgyStatus) => void;
   onGoToTerminal: () => void;
@@ -27,6 +28,7 @@ interface SettingsViewProps {
 export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
   agyStatus,
+  models,
   onSettingsSaved,
   onAgyStatusUpdated,
   onGoToTerminal,
@@ -36,6 +38,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     https_proxy: '',
     no_proxy: 'localhost,127.0.0.1,::1',
     default_model: '',
+    default_effort: '',
     default_permission_mode: 'default' as PermissionMode,
     allow_dangerous_skip: false,
     default_workspace: '',
@@ -65,6 +68,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       https_proxy: settings.https_proxy || '',
       no_proxy: settings.no_proxy || 'localhost,127.0.0.1,::1',
       default_model: settings.default_model || '',
+      default_effort: settings.default_effort || '',
       default_permission_mode: settings.default_permission_mode || 'default',
       allow_dangerous_skip: !!settings.allow_dangerous_skip,
       default_workspace: settings.default_workspace || '',
@@ -389,16 +393,52 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <label className="mb-1 block text-xs text-slate-700 dark:text-slate-300">
                 默认模型（留空使用 CLI 默认）
               </label>
-              <input
-                type="text"
-                value={form.default_model}
-                onChange={(e) => setForm({ ...form, default_model: e.target.value })}
-                placeholder="例如 gemini-2.5-pro"
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500"
-              />
+              {models.length > 0 ? (
+                <select
+                  value={form.default_model}
+                  onChange={(e) => setForm({ ...form, default_model: e.target.value })}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                >
+                  <option value="">默认模型 (CLI 自动)</option>
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                  {form.default_model && !models.some((m) => m.id === form.default_model) && (
+                    <option value={form.default_model}>{form.default_model}</option>
+                  )}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={form.default_model}
+                  onChange={(e) => setForm({ ...form, default_model: e.target.value })}
+                  placeholder="例如 gemini-3.8-flash-medium"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500"
+                />
+              )}
             </div>
 
             <div>
+              <label className="mb-1 block text-xs text-slate-700 dark:text-slate-300">
+                默认思考强度 (--effort)
+              </label>
+              <select
+                value={form.default_effort}
+                onChange={(e) => setForm({ ...form, default_effort: e.target.value })}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              >
+                <option value="">默认 (CLI 自动)</option>
+                <option value="low">低 (low)</option>
+                <option value="medium">中 (medium)</option>
+                <option value="high">高 (high)</option>
+                <option value="xhigh">极高 (xhigh)</option>
+                <option value="max">最大 (max)</option>
+              </select>
+            </div>
+
+            <div className="sm:col-span-2">
               <label className="mb-1 block text-xs text-slate-700 dark:text-slate-300">默认执行模式</label>
               <select
                 value={form.default_permission_mode}

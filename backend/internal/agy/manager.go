@@ -208,15 +208,102 @@ func (m *Manager) GetStatus(ctx context.Context) Status {
 	return st
 }
 
+type ModelOption struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// ListModels runs `agy models` to fetch the available model slugs and human-readable names.
+func (m *Manager) ListModels(ctx context.Context) ([]ModelOption, error) {
+	bin := m.ResolveBinary()
+	if bin == "" {
+		return []ModelOption{}, nil
+	}
+
+	cmdCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(cmdCtx, bin, "models")
+	cmd.Env = m.BuildEnv("NO_COLOR=1")
+	out, err := cmd.Output()
+	if err != nil {
+		return []ModelOption{}, err
+	}
+
+	var models []ModelOption
+	seen := make(map[string]bool)
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "-") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		id := fields[0]
+		// Skip header lines like "MODEL" or "Available"
+		lowerID := strings.ToLower(id)
+		if lowerID == "model" || lowerID == "slug" || lowerID == "available" || strings.HasSuffix(id, ":") {
+			continue
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		label := id
+		if len(fields) > 1 {
+			label = strings.TrimSpace(strings.TrimPrefix(line, id))
+		}
+		models = append(models, ModelOption{ID: id, Label: label})
+	}
+	return models, nil
+}
+
 func (m *Manager) hasCredentials(homeDir string) bool {
+	// Check known agy / Gemini / XDG state directories for any persisted auth/config files
 	checkDirs := []string{
+		filepath.Join(homeDir, ".gemini", "antigravity-cli"),
 		filepath.Join(homeDir, ".gemini"),
 		filepath.Join(homeDir, ".config", "antigravity"),
+		filepath.Join(homeDir, ".config", "antigravity-cli"),
+		filepath.Join(homeDir, ".config", "agy"),
+		filepath.Join(homeDir, ".config", "google-antigravity"),
+		filepath.Join(homeDir, ".local", "share", "antigravity"),
+		filepath.Join(homeDir, ".local", "share", "antigravity-cli"),
+		filepath.Join(homeDir, ".local", "share", "agy"),
 		filepath.Join(homeDir, ".antigravity"),
+		filepath.Join(homeDir, ".agy"),
 	}
 	for _, dir := range checkDirs {
-		entries, err := os.ReadDir(dir)
-		if err == nil && len(entries) > 0 {
+		if dirHasNonEmptyFile(dir, 3) {
+			return true
+		}
+	}
+	return false
+}
+
+func dirHasNonEmptyFile(root string, maxDepth int) bool {
+	if maxDepth < 0 {
+		return false
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if name == "log" || name == "logs" || name == "cache" || name == "tmp" {
+			continue
+		}
+		full := filepath.Join(root, name)
+		if e.IsDir() {
+			if dirHasNonEmptyFile(full, maxDepth-1) {
+				return true
+			}
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.Size() > 0 {
 			return true
 		}
 	}

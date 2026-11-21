@@ -1,5 +1,5 @@
 appname=antigravity-cli
-version=0.1.3
+version=0.1.4
 display_name=Antigravity
 desc=Google Antigravity CLI (agy) 原生飞牛 NAS 工作台：Web Chat 图形对话 + 内置 Web 终端
 platform=x86

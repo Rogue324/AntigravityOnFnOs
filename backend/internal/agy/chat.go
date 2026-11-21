@@ -22,6 +22,7 @@ type ChatRequest struct {
 	Workspace      string
 	ExtraDirs      []string
 	Model          string
+	Effort         string
 	PermissionMode string
 }
 
@@ -56,6 +57,9 @@ func (m *Manager) RunChat(ctx context.Context, req ChatRequest, emit func(ChatEv
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}
+	if req.Effort != "" {
+		args = append(args, "--effort", req.Effort)
+	}
 	for _, dir := range req.ExtraDirs {
 		dir = strings.TrimSpace(dir)
 		if dir != "" {
@@ -65,9 +69,9 @@ func (m *Manager) RunChat(ctx context.Context, req ChatRequest, emit func(ChatEv
 
 	switch req.PermissionMode {
 	case "accept-edits":
-		args = append(args, "--permission-mode", "accept-edits")
+		args = append(args, "--mode", "accept-edits")
 	case "plan":
-		args = append(args, "--permission-mode", "plan")
+		args = append(args, "--mode", "plan")
 	case "bypass":
 		if cfg.AllowDangerousSkip {
 			args = append(args, "--dangerously-skip-permissions")
@@ -126,142 +130,20 @@ func (m *Manager) RunChat(ctx context.Context, req ChatRequest, emit func(ChatEv
 		},
 	}
 
-	var textBuilder strings.Builder
-	var thinkingBuilder strings.Builder
-	toolMap := make(map[string]int)
-
-	upsertTool := func(tc session.ToolCall) {
-		if tc.ID == "" {
-			tc.ID = fmt.Sprintf("tool-%d", len(res.Message.ToolCalls)+1)
-		}
-		if idx, exists := toolMap[tc.ID]; exists {
-			existing := &res.Message.ToolCalls[idx]
-			if tc.Name != "" {
-				existing.Name = tc.Name
-			}
-			if tc.Input != "" {
-				existing.Input = tc.Input
-			}
-			if tc.Output != "" {
-				existing.Output = tc.Output
-			}
-			if tc.Status != "" {
-				existing.Status = tc.Status
-			}
-			copyTC := *existing
-			emit(ChatEvent{Type: "tool_call", ToolCall: &copyTC})
-			return
-		}
-		if tc.Status == "" {
-			tc.Status = "running"
-		}
-		toolMap[tc.ID] = len(res.Message.ToolCalls)
-		res.Message.ToolCalls = append(res.Message.ToolCalls, tc)
-		copyTC := tc
-		emit(ChatEvent{Type: "tool_call", ToolCall: &copyTC})
-	}
+	parser := newStreamParser(res, emit)
 
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
-		var raw map[string]any
-		if err := json.Unmarshal([]byte(line), &raw); err != nil {
-			// Graceful fallback for non-JSON output lines
-			textBuilder.WriteString(line + "\n")
-			emit(ChatEvent{Type: "text", Delta: line + "\n"})
-			continue
-		}
-
-		// Extract conversation/session id if present
-		if cid := firstString(raw, "conversation_id", "conversationId", "session_id", "sessionId"); cid != "" && cid != res.ConversationID {
-			res.ConversationID = cid
-			emit(ChatEvent{Type: "meta", ConversationID: cid})
-		}
-
-		evType := strings.ToLower(firstString(raw, "type", "event"))
-		switch evType {
-		case "thinking", "thought", "reasoning", "thinking_delta":
-			if delta := extractTextField(raw); delta != "" {
-				thinkingBuilder.WriteString(delta)
-				emit(ChatEvent{Type: "thinking", Delta: delta})
-			}
-
-		case "text", "text_delta", "content_delta", "delta", "chunk":
-			if delta := extractTextField(raw); delta != "" {
-				textBuilder.WriteString(delta)
-				emit(ChatEvent{Type: "text", Delta: delta})
-			}
-
-		case "assistant", "message":
-			handleAssistantPayload(raw, &textBuilder, &thinkingBuilder, upsertTool, emit)
-
-		case "tool_use", "tool_call":
-			tc := session.ToolCall{
-				ID:     firstString(raw, "id", "tool_call_id", "call_id"),
-				Name:   firstString(raw, "name", "tool", "tool_name"),
-				Input:  stringifyField(raw["input"], raw["arguments"], raw["args"]),
-				Status: "running",
-			}
-			upsertTool(tc)
-
-		case "tool_result":
-			status := "done"
-			if isErr, ok := raw["is_error"].(bool); ok && isErr {
-				status = "error"
-			}
-			tc := session.ToolCall{
-				ID:     firstString(raw, "tool_use_id", "tool_call_id", "call_id", "id"),
-				Name:   firstString(raw, "name", "tool", "tool_name"),
-				Output: stringifyField(raw["output"], raw["content"], raw["result"]),
-				Status: status,
-			}
-			upsertTool(tc)
-
-		case "result", "done", "complete", "stats":
-			if u := extractUsage(raw); u != nil {
-				res.Message.Usage = u
-				emit(ChatEvent{Type: "usage", Usage: u})
-			}
-			// Some CLI versions only send final result text inside `result`
-			if textBuilder.Len() == 0 {
-				if finalTxt := firstString(raw, "result", "text", "content", "output"); finalTxt != "" {
-					textBuilder.WriteString(finalTxt)
-					emit(ChatEvent{Type: "text", Delta: finalTxt})
-				}
-			}
-
-		case "error":
-			errMsg := firstString(raw, "error", "message", "detail")
-			if errMsg == "" {
-				errMsg = line
-			}
-			res.Message.Error = errMsg
-			emit(ChatEvent{Type: "error", Error: errMsg})
-
-		default:
-			// Check for nested usage or text even in unrecognized event types
-			if u := extractUsage(raw); u != nil {
-				res.Message.Usage = u
-				emit(ChatEvent{Type: "usage", Usage: u})
-			}
-			if delta := extractTextField(raw); delta != "" {
-				textBuilder.WriteString(delta)
-				emit(ChatEvent{Type: "text", Delta: delta})
-			}
-		}
+		parser.ProcessLine(scanner.Text())
 	}
 
 	waitErr := cmd.Wait()
 	<-stderrDone
 
-	res.Message.Content = textBuilder.String()
-	res.Message.Thinking = thinkingBuilder.String()
+	res.Message.Content = parser.textBuilder.String()
+	res.Message.Thinking = parser.thinkingBuilder.String()
 
 	if ctx.Err() != nil {
 		if res.Message.Error == "" {
@@ -285,29 +167,264 @@ func (m *Manager) RunChat(ctx context.Context, req ChatRequest, emit func(ChatEv
 	return res, nil
 }
 
-func handleAssistantPayload(
-	raw map[string]any,
-	textBuilder *strings.Builder,
-	thinkingBuilder *strings.Builder,
-	upsertTool func(session.ToolCall),
-	emit func(ChatEvent),
-) {
+type streamParser struct {
+	res             *ChatResult
+	emit            func(ChatEvent)
+	textBuilder     strings.Builder
+	thinkingBuilder strings.Builder
+	toolMap         map[string]int
+}
+
+func newStreamParser(res *ChatResult, emit func(ChatEvent)) *streamParser {
+	return &streamParser{
+		res:     res,
+		emit:    emit,
+		toolMap: make(map[string]int),
+	}
+}
+
+func (p *streamParser) setConversationID(cid string) {
+	if cid != "" && cid != p.res.ConversationID {
+		p.res.ConversationID = cid
+		p.emit(ChatEvent{Type: "meta", ConversationID: cid})
+	}
+}
+
+func (p *streamParser) upsertTool(tc session.ToolCall) {
+	if tc.ID == "" {
+		tc.ID = fmt.Sprintf("tool-%d", len(p.res.Message.ToolCalls)+1)
+	}
+	if idx, exists := p.toolMap[tc.ID]; exists {
+		existing := &p.res.Message.ToolCalls[idx]
+		if tc.Name != "" {
+			existing.Name = tc.Name
+		}
+		if tc.Input != "" {
+			existing.Input = tc.Input
+		}
+		if tc.Output != "" {
+			existing.Output = tc.Output
+		}
+		if tc.Status != "" {
+			existing.Status = tc.Status
+		}
+		copyTC := *existing
+		p.emit(ChatEvent{Type: "tool_call", ToolCall: &copyTC})
+		return
+	}
+	if tc.Status == "" {
+		tc.Status = "running"
+	}
+	p.toolMap[tc.ID] = len(p.res.Message.ToolCalls)
+	p.res.Message.ToolCalls = append(p.res.Message.ToolCalls, tc)
+	copyTC := tc
+	p.emit(ChatEvent{Type: "tool_call", ToolCall: &copyTC})
+}
+
+func (p *streamParser) ProcessLine(rawLine string) {
+	line := strings.TrimSpace(rawLine)
+	if line == "" {
+		return
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		p.textBuilder.WriteString(line + "\n")
+		p.emit(ChatEvent{Type: "text", Delta: line + "\n"})
+		return
+	}
+
+	// Capture top-level conversation_id (e.g. on `init` event)
+	p.setConversationID(firstString(raw, "conversation_id", "conversationId", "session_id", "sessionId"))
+
+	evType := strings.ToLower(firstString(raw, "event", "type"))
+	switch evType {
+	case "init":
+		if initObj, ok := raw["init"].(map[string]any); ok {
+			p.setConversationID(firstString(initObj, "conversation_id", "conversationId"))
+		}
+
+	case "step_update":
+		// Official agy v1.1+ nested envelope: {"event":"step_update","step_update":{...}}
+		su, _ := raw["step_update"].(map[string]any)
+		if su == nil {
+			su = raw
+		}
+		p.handleStepUpdate(su)
+
+	case "result", "done", "complete", "stats":
+		// Official agy v1.1+ nested envelope: {"event":"result","result":{...}}
+		resObj, _ := raw["result"].(map[string]any)
+		if resObj == nil {
+			resObj = raw
+		}
+		p.handleResult(resObj)
+
+	case "thinking", "thought", "reasoning", "thinking_delta":
+		if delta := extractTextField(raw); delta != "" {
+			p.thinkingBuilder.WriteString(delta)
+			p.emit(ChatEvent{Type: "thinking", Delta: delta})
+		}
+
+	case "text", "text_delta", "content_delta", "delta", "chunk":
+		if delta := extractTextField(raw); delta != "" {
+			p.textBuilder.WriteString(delta)
+			p.emit(ChatEvent{Type: "text", Delta: delta})
+		}
+
+	case "assistant", "message":
+		p.handleAssistantPayload(raw)
+
+	case "tool_use", "tool_call":
+		p.upsertTool(session.ToolCall{
+			ID:     firstString(raw, "id", "tool_call_id", "call_id"),
+			Name:   firstString(raw, "name", "tool", "tool_name"),
+			Input:  stringifyField(raw["input"], raw["arguments"], raw["args"], raw["parameters"]),
+			Status: "running",
+		})
+
+	case "tool_result":
+		status := "done"
+		if isErr, ok := raw["is_error"].(bool); ok && isErr {
+			status = "error"
+		}
+		p.upsertTool(session.ToolCall{
+			ID:     firstString(raw, "tool_use_id", "tool_call_id", "call_id", "id"),
+			Name:   firstString(raw, "name", "tool", "tool_name"),
+			Output: stringifyField(raw["output"], raw["content"], raw["result"]),
+			Status: status,
+		})
+
+	case "error":
+		errMsg := firstString(raw, "error", "message", "detail")
+		if errMsg == "" {
+			errMsg = line
+		}
+		p.res.Message.Error = errMsg
+		p.emit(ChatEvent{Type: "error", Error: errMsg})
+
+	default:
+		if u := extractUsage(raw); u != nil {
+			p.res.Message.Usage = u
+			p.emit(ChatEvent{Type: "usage", Usage: u})
+		}
+		if delta := extractTextField(raw); delta != "" {
+			p.textBuilder.WriteString(delta)
+			p.emit(ChatEvent{Type: "text", Delta: delta})
+		}
+	}
+}
+
+func (p *streamParser) handleStepUpdate(su map[string]any) {
+	p.setConversationID(firstString(su, "conversation_id", "conversationId"))
+
+	if u := extractUsage(su); u != nil {
+		p.res.Message.Usage = u
+		p.emit(ChatEvent{Type: "usage", Usage: u})
+	}
+
+	stepType := strings.ToLower(firstString(su, "step_type", "type"))
+	state := strings.ToUpper(firstString(su, "state"))
+
+	// Thinking delta (if emitted on thinking/reasoning steps)
+	if thinking := firstString(su, "thinking_delta", "thinking", "thought"); thinking != "" {
+		p.thinkingBuilder.WriteString(thinking)
+		p.emit(ChatEvent{Type: "thinking", Delta: thinking})
+	}
+
+	// Incremental agent response text
+	if delta := firstString(su, "text_delta", "delta", "text"); delta != "" {
+		if stepType == "thinking" || stepType == "thought" || stepType == "reasoning" {
+			p.thinkingBuilder.WriteString(delta)
+			p.emit(ChatEvent{Type: "thinking", Delta: delta})
+		} else {
+			p.textBuilder.WriteString(delta)
+			p.emit(ChatEvent{Type: "text", Delta: delta})
+		}
+	}
+
+	// Tool call step
+	if stepType == "tool" || su["tool_info"] != nil || firstString(su, "tool_name") != "" {
+		stepIdx := intFromMap(su, "step_index")
+		toolID := fmt.Sprintf("step-%d", stepIdx)
+		toolName := firstString(su, "tool_name")
+		var inputStr, outputStr string
+		status := "running"
+		if state == "DONE" {
+			status = "done"
+		}
+
+		if info, ok := su["tool_info"].(map[string]any); ok {
+			if n := firstString(info, "name"); n != "" {
+				toolName = n
+			}
+			inputStr = stringifyField(info["parameters"], info["input"], info["arguments"])
+			outputStr = stringifyField(info["output"], info["result"])
+			if errObj, hasErr := info["error"]; hasErr && errObj != nil {
+				status = "error"
+				if errStr := stringifyField(errObj); errStr != "" {
+					if outputStr != "" {
+						outputStr += "\n" + errStr
+					} else {
+						outputStr = errStr
+					}
+				}
+			}
+		}
+
+		p.upsertTool(session.ToolCall{
+			ID:     toolID,
+			Name:   toolName,
+			Input:  inputStr,
+			Output: outputStr,
+			Status: status,
+		})
+	}
+}
+
+func (p *streamParser) handleResult(resObj map[string]any) {
+	p.setConversationID(firstString(resObj, "conversation_id", "conversationId"))
+
+	if u := extractUsage(resObj); u != nil {
+		p.res.Message.Usage = u
+		p.emit(ChatEvent{Type: "usage", Usage: u})
+	}
+
+	// If no streaming text_delta arrived (or response only present in terminal result), use result.response
+	if p.textBuilder.Len() == 0 {
+		if finalTxt := firstString(resObj, "response", "result", "text", "content", "output"); finalTxt != "" {
+			p.textBuilder.WriteString(finalTxt)
+			p.emit(ChatEvent{Type: "text", Delta: finalTxt})
+		}
+	}
+
+	status := strings.ToUpper(firstString(resObj, "status"))
+	if errMsg := firstString(resObj, "error"); errMsg != "" {
+		p.res.Message.Error = errMsg
+		p.emit(ChatEvent{Type: "error", Error: errMsg})
+	} else if status != "" && status != "SUCCESS" {
+		p.res.Message.Error = fmt.Sprintf("执行结束状态: %s", status)
+		p.emit(ChatEvent{Type: "error", Error: p.res.Message.Error})
+	}
+}
+
+func (p *streamParser) handleAssistantPayload(raw map[string]any) {
 	msgObj, _ := raw["message"].(map[string]any)
 	if msgObj == nil {
 		msgObj = raw
 	}
 
 	if contentStr, ok := msgObj["content"].(string); ok && contentStr != "" {
-		textBuilder.WriteString(contentStr)
-		emit(ChatEvent{Type: "text", Delta: contentStr})
+		p.textBuilder.WriteString(contentStr)
+		p.emit(ChatEvent{Type: "text", Delta: contentStr})
 		return
 	}
 
 	blocks, ok := msgObj["content"].([]any)
 	if !ok {
 		if delta := extractTextField(msgObj); delta != "" {
-			textBuilder.WriteString(delta)
-			emit(ChatEvent{Type: "text", Delta: delta})
+			p.textBuilder.WriteString(delta)
+			p.emit(ChatEvent{Type: "text", Delta: delta})
 		}
 		return
 	}
@@ -321,16 +438,16 @@ func handleAssistantPayload(
 		switch bType {
 		case "thinking", "thought":
 			if t := firstString(bm, "thinking", "text", "content"); t != "" {
-				thinkingBuilder.WriteString(t)
-				emit(ChatEvent{Type: "thinking", Delta: t})
+				p.thinkingBuilder.WriteString(t)
+				p.emit(ChatEvent{Type: "thinking", Delta: t})
 			}
 		case "text":
 			if t := firstString(bm, "text", "content"); t != "" {
-				textBuilder.WriteString(t)
-				emit(ChatEvent{Type: "text", Delta: t})
+				p.textBuilder.WriteString(t)
+				p.emit(ChatEvent{Type: "text", Delta: t})
 			}
 		case "tool_use", "tool_call":
-			upsertTool(session.ToolCall{
+			p.upsertTool(session.ToolCall{
 				ID:     firstString(bm, "id", "call_id"),
 				Name:   firstString(bm, "name", "tool"),
 				Input:  stringifyField(bm["input"], bm["arguments"]),
@@ -341,7 +458,7 @@ func handleAssistantPayload(
 }
 
 func extractTextField(m map[string]any) string {
-	if s := firstString(m, "delta", "text", "content", "thinking", "thought"); s != "" {
+	if s := firstString(m, "text_delta", "delta", "text", "content", "response", "thinking", "thought"); s != "" {
 		return s
 	}
 	if deltaObj, ok := m["delta"].(map[string]any); ok {

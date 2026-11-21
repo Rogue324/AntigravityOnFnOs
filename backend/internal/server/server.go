@@ -89,6 +89,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/settings/test-proxy", s.requireAuth(s.handleTestProxy))
 
 	s.mux.HandleFunc("GET /api/agy/status", s.requireAuth(s.handleAgyStatus))
+	s.mux.HandleFunc("GET /api/agy/models", s.requireAuth(s.handleAgyModels))
 	s.mux.HandleFunc("POST /api/agy/install", s.requireAuth(s.handleAgyInstall))
 
 	s.mux.HandleFunc("GET /api/fs/browse", s.requireAuth(s.handleFSBrowse))
@@ -217,6 +218,7 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		HTTPSProxy            *string `json:"https_proxy"`
 		NoProxy               *string `json:"no_proxy"`
 		DefaultModel          *string `json:"default_model"`
+		DefaultEffort         *string `json:"default_effort"`
 		DefaultPermissionMode *string `json:"default_permission_mode"`
 		AllowDangerousSkip    *bool   `json:"allow_dangerous_skip"`
 		DefaultWorkspace      *string `json:"default_workspace"`
@@ -239,6 +241,9 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.DefaultModel != nil {
 			c.DefaultModel = strings.TrimSpace(*body.DefaultModel)
+		}
+		if body.DefaultEffort != nil {
+			c.DefaultEffort = strings.TrimSpace(*body.DefaultEffort)
 		}
 		if body.DefaultPermissionMode != nil {
 			mode := strings.TrimSpace(*body.DefaultPermissionMode)
@@ -279,6 +284,15 @@ func (s *Server) handleTestProxy(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAgyStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.agyMgr.GetStatus(r.Context()))
+}
+
+func (s *Server) handleAgyModels(w http.ResponseWriter, r *http.Request) {
+	models, err := s.agyMgr.ListModels(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"models": []agy.ModelOption{}, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"models": models})
 }
 
 func (s *Server) handleAgyInstall(w http.ResponseWriter, r *http.Request) {
@@ -328,6 +342,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		Workspace      string   `json:"workspace"`
 		ExtraDirs      []string `json:"extra_dirs"`
 		Model          string   `json:"model"`
+		Effort         string   `json:"effort"`
 		PermissionMode string   `json:"permission_mode"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
@@ -339,11 +354,14 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	if body.Model == "" {
 		body.Model = cfg.DefaultModel
 	}
+	if body.Effort == "" {
+		body.Effort = cfg.DefaultEffort
+	}
 	if body.PermissionMode == "" {
 		body.PermissionMode = cfg.DefaultPermissionMode
 	}
 
-	sess, err := s.sessStore.Create(body.Title, body.Workspace, body.ExtraDirs, body.Model, body.PermissionMode)
+	sess, err := s.sessStore.Create(body.Title, body.Workspace, body.ExtraDirs, body.Model, body.Effort, body.PermissionMode)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -372,6 +390,7 @@ func (s *Server) handleUpdateSession(w http.ResponseWriter, r *http.Request) {
 		Workspace      *string   `json:"workspace"`
 		ExtraDirs      *[]string `json:"extra_dirs"`
 		Model          *string   `json:"model"`
+		Effort         *string   `json:"effort"`
 		PermissionMode *string   `json:"permission_mode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -391,6 +410,9 @@ func (s *Server) handleUpdateSession(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.Model != nil {
 			sess.Model = strings.TrimSpace(*body.Model)
+		}
+		if body.Effort != nil {
+			sess.Effort = strings.TrimSpace(*body.Effort)
 		}
 		if body.PermissionMode != nil {
 			sess.PermissionMode = strings.TrimSpace(*body.PermissionMode)
@@ -437,6 +459,7 @@ func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
 		Workspace      string   `json:"workspace,omitempty"`
 		ExtraDirs      []string `json:"extra_dirs,omitempty"`
 		Model          string   `json:"model,omitempty"`
+		Effort         string   `json:"effort,omitempty"`
 		PermissionMode string   `json:"permission_mode,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -459,6 +482,9 @@ func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.Model != "" {
 			cur.Model = body.Model
+		}
+		if body.Effort != "" {
+			cur.Effort = body.Effort
 		}
 		if body.PermissionMode != "" {
 			cur.PermissionMode = body.PermissionMode
@@ -493,6 +519,7 @@ func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
 		Workspace:      sess.Workspace,
 		ExtraDirs:      sess.ExtraDirs,
 		Model:          sess.Model,
+		Effort:         sess.Effort,
 		PermissionMode: sess.PermissionMode,
 	}, func(ev agy.ChatEvent) {
 		sendSSE(w, flusher, ev.Type, ev)

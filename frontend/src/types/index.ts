@@ -8,11 +8,17 @@ export interface AuthStatus {
   authenticated: boolean;
 }
 
+export interface ModelOption {
+  id: string;
+  label: string;
+}
+
 export interface AppSettings {
   http_proxy: string;
   https_proxy: string;
   no_proxy: string;
   default_model: string;
+  default_effort: string;
   default_permission_mode: PermissionMode;
   allow_dangerous_skip: boolean;
   default_workspace: string;
@@ -90,6 +96,7 @@ export interface SessionSummary {
   workspace: string;
   extra_dirs?: string[];
   model?: string;
+  effort?: string;
   permission_mode?: string;
   message_count: number;
   created_at: string;
@@ -103,6 +110,7 @@ export interface ChatSession {
   workspace: string;
   extra_dirs?: string[];
   model?: string;
+  effort?: string;
   permission_mode?: string;
   messages: ChatMessage[];
   created_at: string;

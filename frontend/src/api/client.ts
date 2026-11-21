@@ -5,6 +5,7 @@ import type {
   BrowseResponse,
   ChatSSEEvent,
   ChatSession,
+  ModelOption,
   ProxyTestResult,
   SessionSummary,
 } from '../types';
@@ -84,6 +85,7 @@ export const api = {
     }),
 
   agyStatus: () => request<AgyStatus>('/api/agy/status'),
+  agyModels: () => request<{ models: ModelOption[]; error?: string }>('/api/agy/models'),
 
   browseFS: (path = '', hidden = false) =>
     request<BrowseResponse>(
@@ -96,6 +98,7 @@ export const api = {
     workspace?: string;
     extra_dirs?: string[];
     model?: string;
+    effort?: string;
     permission_mode?: string;
   }) =>
     request<ChatSession>('/api/sessions', {
@@ -110,6 +113,7 @@ export const api = {
       workspace?: string;
       extra_dirs?: string[];
       model?: string;
+      effort?: string;
       permission_mode?: string;
     }
   ) =>
@@ -177,6 +181,7 @@ export async function streamSessionChat(
     workspace?: string;
     extra_dirs?: string[];
     model?: string;
+    effort?: string;
     permission_mode?: string;
   },
   onEvent: (ev: ChatSSEEvent) => void,

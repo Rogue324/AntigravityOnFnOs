@@ -16,6 +16,7 @@ type Config struct {
 	HTTPSProxy            string `json:"https_proxy"`
 	NoProxy               string `json:"no_proxy"`
 	DefaultModel          string `json:"default_model"`
+	DefaultEffort         string `json:"default_effort"`
 	DefaultPermissionMode string `json:"default_permission_mode"` // default | accept-edits | plan | bypass
 	AllowDangerousSkip    bool   `json:"allow_dangerous_skip"`
 	DefaultWorkspace      string `json:"default_workspace"`
@@ -28,6 +29,7 @@ type PublicConfig struct {
 	HTTPSProxy            string `json:"https_proxy"`
 	NoProxy               string `json:"no_proxy"`
 	DefaultModel          string `json:"default_model"`
+	DefaultEffort         string `json:"default_effort"`
 	DefaultPermissionMode string `json:"default_permission_mode"`
 	AllowDangerousSkip    bool   `json:"allow_dangerous_skip"`
 	DefaultWorkspace      string `json:"default_workspace"`
@@ -145,6 +147,7 @@ func (s *Store) Public() PublicConfig {
 		HTTPSProxy:            s.cfg.HTTPSProxy,
 		NoProxy:               s.cfg.NoProxy,
 		DefaultModel:          s.cfg.DefaultModel,
+		DefaultEffort:         s.cfg.DefaultEffort,
 		DefaultPermissionMode: s.cfg.DefaultPermissionMode,
 		AllowDangerousSkip:    s.cfg.AllowDangerousSkip,
 		DefaultWorkspace:      s.cfg.DefaultWorkspace,

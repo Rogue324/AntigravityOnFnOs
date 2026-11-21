@@ -45,6 +45,7 @@ type Session struct {
 	Workspace      string    `json:"workspace"`
 	ExtraDirs      []string  `json:"extra_dirs,omitempty"`
 	Model          string    `json:"model,omitempty"`
+	Effort         string    `json:"effort,omitempty"`
 	PermissionMode string    `json:"permission_mode,omitempty"`
 	Messages       []Message `json:"messages"`
 	CreatedAt      time.Time `json:"created_at"`
@@ -59,6 +60,7 @@ type Summary struct {
 	Workspace      string    `json:"workspace"`
 	ExtraDirs      []string  `json:"extra_dirs,omitempty"`
 	Model          string    `json:"model,omitempty"`
+	Effort         string    `json:"effort,omitempty"`
 	PermissionMode string    `json:"permission_mode,omitempty"`
 	MessageCount   int       `json:"message_count"`
 	CreatedAt      time.Time `json:"created_at"`
@@ -95,6 +97,7 @@ func (s *Store) List() []Summary {
 			Workspace:      sess.Workspace,
 			ExtraDirs:      append([]string(nil), sess.ExtraDirs...),
 			Model:          sess.Model,
+			Effort:         sess.Effort,
 			PermissionMode: sess.PermissionMode,
 			MessageCount:   len(sess.Messages),
 			CreatedAt:      sess.CreatedAt,
@@ -117,7 +120,7 @@ func (s *Store) Get(id string) (*Session, error) {
 	return cloneSession(sess), nil
 }
 
-func (s *Store) Create(title, workspace string, extraDirs []string, model, permMode string) (*Session, error) {
+func (s *Store) Create(title, workspace string, extraDirs []string, model, effort, permMode string) (*Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -131,6 +134,7 @@ func (s *Store) Create(title, workspace string, extraDirs []string, model, permM
 		Workspace:      workspace,
 		ExtraDirs:      append([]string(nil), extraDirs...),
 		Model:          model,
+		Effort:         effort,
 		PermissionMode: permMode,
 		Messages:       []Message{},
 		CreatedAt:      now,

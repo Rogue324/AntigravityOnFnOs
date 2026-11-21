@@ -18,6 +18,8 @@ import {
   Shield,
   CheckCircle2,
   Loader2,
+  Gauge,
+  RefreshCw,
 } from 'lucide-react';
 import { api, streamSessionChat } from '../api/client';
 import type {
@@ -25,6 +27,7 @@ import type {
   AppSettings,
   ChatMessage,
   ChatSession,
+  ModelOption,
   ToolCall,
 } from '../types';
 import { DirPickerModal } from './DirPickerModal';
@@ -33,6 +36,8 @@ interface ChatViewProps {
   session: ChatSession | null;
   settings: AppSettings | null;
   agyStatus: AgyStatus | null;
+  models: ModelOption[];
+  onRefreshModels: () => void;
   onSessionUpdated: (sess: ChatSession) => void;
   onCreateSession: () => Promise<ChatSession | null>;
   onOpenInTerminal: (workspace: string, conversationId?: string) => void;
@@ -124,6 +129,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   session,
   settings,
   agyStatus,
+  models,
+  onRefreshModels,
   onSessionUpdated,
   onCreateSession,
   onOpenInTerminal,
@@ -146,6 +153,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
     workspace?: string;
     extra_dirs?: string[];
     model?: string;
+    effort?: string;
     permission_mode?: string;
   }) => {
     if (!session) return;
@@ -203,6 +211,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           workspace: active.workspace,
           extra_dirs: active.extra_dirs,
           model: active.model,
+          effort: active.effort,
           permission_mode: active.permission_mode,
         },
         (ev) => {
@@ -257,6 +266,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const workspace = session?.workspace || settings?.default_workspace || '/vol1';
   const extraDirs = session?.extra_dirs || [];
   const model = session?.model ?? settings?.default_model ?? '';
+  const effort = session?.effort ?? settings?.default_effort ?? '';
   const permMode = session?.permission_mode || settings?.default_permission_mode || 'default';
 
   const messages = session?.messages || [];
@@ -301,16 +311,76 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </button>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {/* Model */}
+          {/* Model selector */}
           <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950">
-            <Cpu className="h-3.5 w-3.5 text-slate-400" />
-            <input
-              type="text"
-              value={model}
-              onChange={(e) => updateMeta({ model: e.target.value })}
-              placeholder="默认模型"
-              className="w-28 bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder-slate-500"
-            />
+            <Cpu className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            {models.length > 0 ? (
+              <select
+                value={model}
+                onChange={(e) => updateMeta({ model: e.target.value })}
+                title="选择模型"
+                className="max-w-[180px] bg-transparent text-xs text-slate-700 focus:outline-none dark:text-slate-200"
+              >
+                <option value="" className="bg-white dark:bg-slate-900">
+                  默认模型 (CLI 自动)
+                </option>
+                {models.map((m) => (
+                  <option key={m.id} value={m.id} className="bg-white dark:bg-slate-900">
+                    {m.label}
+                  </option>
+                ))}
+                {model && !models.some((m) => m.id === model) && (
+                  <option value={model} className="bg-white dark:bg-slate-900">
+                    {model}
+                  </option>
+                )}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => updateMeta({ model: e.target.value })}
+                placeholder="默认模型"
+                className="w-28 bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder-slate-500"
+              />
+            )}
+            <button
+              onClick={onRefreshModels}
+              title="刷新可用模型列表 (agy models)"
+              className="rounded p-0.5 text-slate-400 hover:text-indigo-500"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+          </div>
+
+          {/* Reasoning Effort selector */}
+          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950">
+            <Gauge className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <select
+              value={effort}
+              onChange={(e) => updateMeta({ effort: e.target.value })}
+              title="思考强度 (--effort)"
+              className="bg-transparent text-xs text-slate-700 focus:outline-none dark:text-slate-200"
+            >
+              <option value="" className="bg-white dark:bg-slate-900">
+                思考: 默认
+              </option>
+              <option value="low" className="bg-white dark:bg-slate-900">
+                思考: 低 (low)
+              </option>
+              <option value="medium" className="bg-white dark:bg-slate-900">
+                思考: 中 (medium)
+              </option>
+              <option value="high" className="bg-white dark:bg-slate-900">
+                思考: 高 (high)
+              </option>
+              <option value="xhigh" className="bg-white dark:bg-slate-900">
+                思考: 极高 (xhigh)
+              </option>
+              <option value="max" className="bg-white dark:bg-slate-900">
+                思考: 最大 (max)
+              </option>
+            </select>
           </div>
 
           {/* Permission Mode */}
