@@ -46,8 +46,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800/90 dark:bg-slate-900/95">
       {/* Brand */}
       <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-3.5 dark:border-slate-800">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow shadow-indigo-500/20">
-          <Sparkles className="h-4 w-4 text-white" />
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white p-1 shadow-xs dark:border-slate-700 dark:bg-slate-800">
+          <img src="./icon.png" alt="Antigravity" className="h-full w-full object-contain" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">

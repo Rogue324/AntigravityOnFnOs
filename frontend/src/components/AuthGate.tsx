@@ -64,8 +64,8 @@ export const AuthGate: React.FC<AuthGateProps> = ({
 
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-2xl">
         <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/20">
-            <Sparkles className="h-6 w-6 text-white" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <img src="./icon.png" alt="Antigravity" className="h-full w-full object-contain" />
           </div>
           <div>
             <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Antigravity for fnOS</h1>
