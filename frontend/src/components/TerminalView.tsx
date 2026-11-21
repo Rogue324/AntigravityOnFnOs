@@ -10,7 +10,7 @@ import {
   Sparkles,
   Info,
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, wsUrl } from '../api/client';
 import type { AppSettings, TerminalLaunchRequest } from '../types';
 import { DirPickerModal } from './DirPickerModal';
 
@@ -85,7 +85,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         const { ticket } = await api.createWSTicket();
         if (disposed) return;
 
-        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const params = new URLSearchParams({
           ticket,
           mode,
@@ -97,7 +96,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           params.set('conversation', conversationId);
         }
 
-        const ws = new WebSocket(`${proto}//${window.location.host}/api/terminal/ws?${params}`);
+        const ws = new WebSocket(wsUrl(`/api/terminal/ws?${params}`));
         ws.binaryType = 'arraybuffer';
         wsRef.current = ws;
 

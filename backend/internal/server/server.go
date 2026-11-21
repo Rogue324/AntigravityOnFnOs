@@ -19,24 +19,27 @@ import (
 )
 
 type Server struct {
-	cfgStore  *config.Store
-	authMgr   *auth.Manager
-	agyMgr    *agy.Manager
-	sessStore *session.Store
-	upgrader  websocket.Upgrader
-	mux       *http.ServeMux
+	cfgStore      *config.Store
+	authMgr       *auth.Manager
+	agyMgr        *agy.Manager
+	sessStore     *session.Store
+	gatewayPrefix string
+	upgrader      websocket.Upgrader
+	mux           *http.ServeMux
 }
 
-func New(cfgStore *config.Store, authMgr *auth.Manager, agyMgr *agy.Manager, sessStore *session.Store) *Server {
+func New(cfgStore *config.Store, authMgr *auth.Manager, agyMgr *agy.Manager, sessStore *session.Store, gatewayPrefix string) *Server {
+	prefix := strings.TrimRight(strings.TrimSpace(gatewayPrefix), "/")
 	s := &Server{
-		cfgStore:  cfgStore,
-		authMgr:   authMgr,
-		agyMgr:    agyMgr,
-		sessStore: sessStore,
+		cfgStore:      cfgStore,
+		authMgr:       authMgr,
+		agyMgr:        agyMgr,
+		sessStore:     sessStore,
+		gatewayPrefix: prefix,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  8192,
 			WriteBufferSize: 8192,
-			// Allow access via NAS LAN IP, custom domain, or fnConnect relay;
+			// Allow access via fnOS unified gateway, NAS LAN IP, custom domain, or fnConnect relay;
 			// actual access control is enforced by session cookie / single-use WS ticket.
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
@@ -47,6 +50,25 @@ func New(cfgStore *config.Store, authMgr *auth.Manager, agyMgr *agy.Manager, ses
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.gatewayPrefix != "" {
+		if r.URL.Path == s.gatewayPrefix {
+			target := s.gatewayPrefix + "/"
+			if r.URL.RawQuery != "" {
+				target += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, s.gatewayPrefix+"/") {
+			r2 := r.Clone(r.Context())
+			r2.URL.Path = strings.TrimPrefix(r.URL.Path, s.gatewayPrefix)
+			if r2.URL.RawPath != "" {
+				r2.URL.RawPath = strings.TrimPrefix(r2.URL.RawPath, s.gatewayPrefix)
+			}
+			s.mux.ServeHTTP(w, r2)
+			return
+		}
+	}
 	s.mux.ServeHTTP(w, r)
 }
 

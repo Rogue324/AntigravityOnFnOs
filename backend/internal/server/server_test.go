@@ -31,18 +31,28 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("session.NewStore: %v", err)
 	}
-	return New(cfgStore, auth.NewManager(cfgStore), agy.NewManager(cfgStore), sessStore)
+	return New(cfgStore, auth.NewManager(cfgStore), agy.NewManager(cfgStore), sessStore, "/app/antigravity-cli")
 }
 
 func TestAuthSettingsAndSessionsFlow(t *testing.T) {
 	srv := newTestServer(t)
 
-	// 1. Health check works without auth
-	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	// 1. Health check works both at root and under fnOS gateway prefix
+	for _, p := range []string{"/api/health", "/app/antigravity-cli/api/health"} {
+		req := httptest.NewRequest(http.MethodGet, p, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for %s, got %d", p, rec.Code)
+		}
+	}
+
+	// Gateway root without trailing slash redirects to trailing slash for relative assets
+	req := httptest.NewRequest(http.MethodGet, "/app/antigravity-cli", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 for /api/health, got %d", rec.Code)
+	if rec.Code != http.StatusTemporaryRedirect || rec.Header().Get("Location") != "/app/antigravity-cli/" {
+		t.Fatalf("expected redirect to /app/antigravity-cli/, got %d loc=%q", rec.Code, rec.Header().Get("Location"))
 	}
 
 	// 2. Protected route rejected before login

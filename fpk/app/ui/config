@@ -3,10 +3,11 @@
     "antigravity-cli.main": {
       "title": "Antigravity",
       "icon": "images/icon_{0}.png",
-      "type": "url",
+      "type": "iframe",
       "protocol": "",
-      "port": "18765",
-      "url": "/",
+      "gatewayPrefix": "/app/antigravity-cli",
+      "gatewaySocket": "app.sock",
+      "url": "/app/antigravity-cli",
       "allUsers": false
     }
   }

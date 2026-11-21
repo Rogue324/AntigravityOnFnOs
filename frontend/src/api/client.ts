@@ -9,8 +9,27 @@ import type {
   SessionSummary,
 } from '../types';
 
+const GATEWAY_PREFIX = '/app/antigravity-cli';
+
+export function getBasePrefix(): string {
+  const p = window.location.pathname;
+  if (p === GATEWAY_PREFIX || p.startsWith(`${GATEWAY_PREFIX}/`)) {
+    return GATEWAY_PREFIX;
+  }
+  return '';
+}
+
+export function apiUrl(path: string): string {
+  return `${getBasePrefix()}${path}`;
+}
+
+export function wsUrl(path: string): string {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}${apiUrl(path)}`;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetch(apiUrl(url), {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
@@ -163,7 +182,7 @@ export async function streamSessionChat(
   onEvent: (ev: ChatSSEEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/chat`, {
+  const res = await fetch(apiUrl(`/api/sessions/${encodeURIComponent(sessionId)}/chat`), {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -186,7 +205,7 @@ export async function streamAgyInstall(
   onDone: (result: { ok: boolean; error?: string; status?: AgyStatus }) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const res = await fetch('/api/agy/install', {
+  const res = await fetch(apiUrl('/api/agy/install'), {
     method: 'POST',
     credentials: 'include',
     signal,
