@@ -1,0 +1,13 @@
+{
+  ".url": {
+    "antigravity-cli.main": {
+      "title": "Antigravity",
+      "icon": "images/icon_{0}.png",
+      "type": "url",
+      "protocol": "",
+      "port": "18765",
+      "url": "/",
+      "allUsers": false
+    }
+  }
+}

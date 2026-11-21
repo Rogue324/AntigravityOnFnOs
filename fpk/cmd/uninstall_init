@@ -1,0 +1,3 @@
+#!/bin/bash
+# Preserve user data in ${TRIM_PKGVAR} unless fnOS removes package data on purge
+exit 0

@@ -1,0 +1,110 @@
+#!/bin/bash
+set -u
+
+APP_BIN="${TRIM_APPDEST}/server/agy-fnos"
+DATA_DIR="${TRIM_PKGVAR}"
+LOG_FILE="${DATA_DIR}/app.log"
+PID_FILE="${DATA_DIR}/app.pid"
+PORT="${TRIM_SERVICE_PORT:-18765}"
+
+mkdir -p "${DATA_DIR}" "${DATA_DIR}/home" "${DATA_DIR}/bin"
+
+log_msg() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "${LOG_FILE}"
+}
+
+check_process() {
+  local pid="$1"
+  [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null
+}
+
+status_app() {
+  if [ -f "${PID_FILE}" ]; then
+    local pid
+    pid="$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')"
+    if check_process "${pid}"; then
+      return 0
+    fi
+    rm -f "${PID_FILE}"
+  fi
+  return 1
+}
+
+start_app() {
+  if status_app; then
+    return 0
+  fi
+
+  if [ ! -x "${APP_BIN}" ]; then
+    log_msg "ERROR: binary not found or not executable: ${APP_BIN}"
+    exit 1
+  fi
+
+  log_msg "Starting Antigravity for fnOS on port ${PORT} (user=$(id -un))..."
+  export AGY_DATA_DIR="${DATA_DIR}"
+  export AGY_HOME_DIR="${DATA_DIR}/home"
+  export HOME="${DATA_DIR}/home"
+  export PORT="${PORT}"
+
+  nohup "${APP_BIN}" -addr "0.0.0.0:${PORT}" >> "${LOG_FILE}" 2>&1 &
+  local pid=$!
+  echo "${pid}" > "${PID_FILE}"
+
+  sleep 1
+  if ! check_process "${pid}"; then
+    log_msg "ERROR: process exited immediately after start"
+    rm -f "${PID_FILE}"
+    exit 1
+  fi
+  log_msg "Started successfully (pid=${pid})"
+  return 0
+}
+
+stop_app() {
+  log_msg "Stopping Antigravity for fnOS..."
+  if [ ! -f "${PID_FILE}" ]; then
+    return 0
+  fi
+
+  local pid
+  pid="$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')"
+  if ! check_process "${pid}"; then
+    rm -f "${PID_FILE}"
+    return 0
+  fi
+
+  kill -TERM "${pid}" 2>> "${LOG_FILE}" || true
+  local count=0
+  while check_process "${pid}" && [ "${count}" -lt 10 ]; do
+    sleep 1
+    count=$((count + 1))
+  done
+
+  if check_process "${pid}"; then
+    log_msg "Process ${pid} did not exit gracefully, sending SIGKILL"
+    kill -KILL "${pid}" 2>> "${LOG_FILE}" || true
+  fi
+
+  rm -f "${PID_FILE}"
+  log_msg "Stopped."
+  return 0
+}
+
+case "${1:-}" in
+  start)
+    start_app
+    ;;
+  stop)
+    stop_app
+    ;;
+  status)
+    if status_app; then
+      exit 0
+    fi
+    exit 3
+    ;;
+  *)
+    echo "Unknown command: ${1:-}"
+    exit 1
+    ;;
+esac

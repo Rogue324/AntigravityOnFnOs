@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+mkdir -p "${TRIM_PKGVAR}/home" "${TRIM_PKGVAR}/bin"
+chmod 750 "${TRIM_PKGVAR}" "${TRIM_PKGVAR}/home" "${TRIM_PKGVAR}/bin" 2>/dev/null || true
+exit 0
