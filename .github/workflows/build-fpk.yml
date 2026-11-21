@@ -32,14 +32,16 @@ jobs:
         working-directory: backend
         run: go test ./...
 
-      - name: Build amd64 and arm64 packages
+      - name: Build amd64 and arm64 FPK packages
         run: bash scripts/build.sh all
 
-      - name: Upload build artifacts
+      - name: Upload FPK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: antigravity-fnos-builds
+          name: antigravity-cli-fpk
           path: |
-            dist/*.fpk
-            dist/stage-x86
-            dist/stage-arm
+            dist/antigravity-cli-amd64.fpk
+            dist/antigravity-cli-amd64.fpk.sha256
+            dist/antigravity-cli-arm64.fpk
+            dist/antigravity-cli-arm64.fpk.sha256
+          if-no-files-found: error
