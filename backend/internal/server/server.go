@@ -77,6 +77,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.HandleFunc("GET /api/auth/status", s.handleAuthStatus)
 	s.mux.HandleFunc("POST /api/auth/setup", s.handleAuthSetup)
+	s.mux.HandleFunc("POST /api/auth/skip", s.handleAuthSkip)
 	s.mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
 	s.mux.HandleFunc("POST /api/auth/logout", s.handleAuthLogout)
 
@@ -130,7 +131,20 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"initialized":   s.authMgr.IsInitialized(),
 		"authenticated": authenticated,
+		"auth_disabled": s.authMgr.IsAuthDisabled(),
 	})
+}
+
+func (s *Server) handleAuthSkip(w http.ResponseWriter, _ *http.Request) {
+	if err := s.authMgr.SkipInitialSetup(); err != nil {
+		code := http.StatusBadRequest
+		if errors.Is(err, auth.ErrAlreadyInitialized) {
+			code = http.StatusConflict
+		}
+		writeError(w, code, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "auth_disabled": true})
 }
 
 func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
@@ -191,6 +205,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
+	wasDisabled := s.authMgr.IsAuthDisabled()
 	if err := s.authMgr.ChangePassword(body.CurrentPassword, body.NewPassword); err != nil {
 		code := http.StatusBadRequest
 		if errors.Is(err, auth.ErrInvalidPassword) {
@@ -198,6 +213,12 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		}
 		writeError(w, code, err.Error())
 		return
+	}
+	// If password protection was previously off, issue a session cookie so the current browser stays signed in.
+	if wasDisabled {
+		if token, err := s.authMgr.IssueSession(); err == nil {
+			s.authMgr.SetSessionCookie(w, r, token)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
@@ -227,11 +248,18 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		DefaultWorkspace      *string `json:"default_workspace"`
 		AgyBinaryPath         *string `json:"agy_binary_path"`
 		PersistentIdleMinutes *int    `json:"persistent_idle_minutes"`
+		AuthDisabled          *bool   `json:"auth_disabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
+
+	if body.AuthDisabled != nil && !*body.AuthDisabled && !s.authMgr.IsInitialized() {
+		writeError(w, http.StatusBadRequest, "请先设置启动密码后再开启密码保护")
+		return
+	}
+	wasDisabled := s.authMgr.IsAuthDisabled()
 
 	err := s.cfgStore.Update(func(c *config.Config) {
 		if body.HTTPProxy != nil {
@@ -275,6 +303,9 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 			}
 			c.PersistentIdleMinutes = mins
 		}
+		if body.AuthDisabled != nil {
+			c.AuthDisabled = *body.AuthDisabled
+		}
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -282,6 +313,13 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.PersistentIdleMinutes != nil && *body.PersistentIdleMinutes == 0 {
 		s.agyMgr.CloseAll()
+	}
+	// If re-enabling password protection from passwordless mode, issue a fresh session cookie
+	// so the current browser remains authenticated.
+	if wasDisabled && body.AuthDisabled != nil && !*body.AuthDisabled {
+		if token, err := s.authMgr.IssueSession(); err == nil {
+			s.authMgr.SetSessionCookie(w, r, token)
+		}
 	}
 	writeJSON(w, http.StatusOK, s.cfgStore.Public())
 }

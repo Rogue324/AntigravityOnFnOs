@@ -133,6 +133,28 @@ export const AuthGate: React.FC<AuthGateProps> = ({
             <span>{loading ? '请稍候...' : initialized ? '解锁进入' : '设置密码并进入'}</span>
             <ArrowRight className="h-4 w-4" />
           </button>
+
+          {!initialized && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={async () => {
+                setError('');
+                setLoading(true);
+                try {
+                  await api.skipAuthSetup();
+                  onAuthenticated();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : '操作失败');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              暂不设置启动密码，无密码直接进入（可在设置中随时开启）
+            </button>
+          )}
         </form>
       </div>
     </div>

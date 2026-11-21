@@ -12,7 +12,6 @@ import {
   Sun,
   Moon,
   X,
-  PanelLeftClose,
 } from 'lucide-react';
 import type { ActiveTab, AgyStatus, SessionSummary, ThemeMode } from '../types';
 
@@ -28,10 +27,9 @@ interface SidebarProps {
   theme: ThemeMode;
   onToggleTheme: () => void;
   onLogout: () => void;
+  authDisabled: boolean;
   mobileOpen: boolean;
   onCloseMobile: () => void;
-  desktopCollapsed: boolean;
-  onCollapseDesktop: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -46,10 +44,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   theme,
   onToggleTheme,
   onLogout,
+  authDisabled,
   mobileOpen,
   onCloseMobile,
-  desktopCollapsed,
-  onCollapseDesktop,
 }) => {
   const sidebarBody = (
     <aside className="flex h-full w-72 max-w-[82vw] shrink-0 flex-col border-r border-slate-200 bg-white lg:w-64 dark:border-slate-800/90 dark:bg-slate-900/95">
@@ -70,13 +67,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:hidden dark:hover:bg-slate-800 dark:hover:text-white"
         >
           <X className="h-4 w-4" />
-        </button>
-        <button
-          onClick={onCollapseDesktop}
-          title="收起侧边栏"
-          className="hidden rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:inline-flex dark:hover:bg-slate-800 dark:hover:text-white"
-        >
-          <PanelLeftClose className="h-4 w-4" />
         </button>
       </div>
 
@@ -208,7 +198,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className={`grid gap-1.5 ${authDisabled ? 'grid-cols-1' : 'grid-cols-2'}`}>
           <button
             onClick={onToggleTheme}
             className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-2 text-xs text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 md:py-1.5 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
@@ -216,23 +206,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {theme === 'light' ? (
               <>
                 <Moon className="h-3.5 w-3.5" />
-                <span>深色</span>
+                <span>深色模式</span>
               </>
             ) : (
               <>
                 <Sun className="h-3.5 w-3.5 text-amber-400" />
-                <span>浅色</span>
+                <span>浅色模式</span>
               </>
             )}
           </button>
 
-          <button
-            onClick={onLogout}
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-2 text-xs text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 md:py-1.5 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            <span>锁定</span>
-          </button>
+          {!authDisabled && (
+            <button
+              onClick={onLogout}
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-2 text-xs text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 md:py-1.5 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>锁定</span>
+            </button>
+          )}
         </div>
       </div>
     </aside>
@@ -240,8 +232,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Desktop sidebar (>= 1024px unless collapsed) */}
-      {!desktopCollapsed && <div className="hidden h-full lg:flex">{sidebarBody}</div>}
+      {/* Desktop persistent sidebar (>= 1024px) */}
+      <div className="hidden h-full lg:flex">{sidebarBody}</div>
 
       {/* Mobile / narrow-window slide-over drawer (< 1024px) */}
       {mobileOpen && (

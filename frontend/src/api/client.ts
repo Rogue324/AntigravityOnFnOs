@@ -60,6 +60,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ password }),
     }),
+  skipAuthSetup: () =>
+    request<{ ok: boolean; auth_disabled: boolean }>('/api/auth/skip', {
+      method: 'POST',
+    }),
   login: (password: string) =>
     request<{ ok: boolean; token: string }>('/api/auth/login', {
       method: 'POST',

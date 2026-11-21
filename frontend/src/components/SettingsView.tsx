@@ -142,6 +142,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  const [authToggling, setAuthToggling] = useState(false);
+
+  const handleToggleAuthDisabled = async (disabled: boolean) => {
+    setPwdMsg(null);
+    setAuthToggling(true);
+    try {
+      const updated = await api.updateSettings({ auth_disabled: disabled });
+      onSettingsSaved(updated);
+      setPwdMsg({
+        ok: true,
+        text: disabled ? '已关闭启动密码，下次打开将直接进入' : '已开启启动密码保护',
+      });
+    } catch (err) {
+      setPwdMsg({ ok: false, text: err instanceof Error ? err.message : '切换失败' });
+    } finally {
+      setAuthToggling(false);
+    }
+  };
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPwdMsg(null);
@@ -153,7 +172,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       await api.changePassword(curPwd, newPwd);
       setCurPwd('');
       setNewPwd('');
-      setPwdMsg({ ok: true, text: '访问密码已更新' });
+      const refreshed = await api.getSettings();
+      onSettingsSaved(refreshed);
+      setPwdMsg({
+        ok: true,
+        text: settings?.password_set ? '访问密码已更新' : '启动密码已设置并自动开启保护',
+      });
     } catch (err) {
       setPwdMsg({ ok: false, text: err instanceof Error ? err.message : '修改失败' });
     }
@@ -498,34 +522,85 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </label>
         </section>
 
-        {/* 4. Change Password */}
+        {/* 4. Startup Password & Access Security */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/70">
-          <div className="mb-4 flex items-center gap-2">
-            <KeyRound className="h-4 w-4 text-indigo-500 dark:text-indigo-400" />
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">修改应用访问密码</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-indigo-500 dark:text-indigo-400" />
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">启动密码与访问安全</h2>
+            </div>
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                settings?.auth_disabled
+                  ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                  : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+              }`}
+            >
+              {settings?.auth_disabled ? '无密码直接进入' : '已开启启动密码'}
+            </span>
           </div>
 
-          <form onSubmit={handleChangePassword} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <input
-              type="password"
-              value={curPwd}
-              onChange={(e) => setCurPwd(e.target.value)}
-              placeholder="当前密码"
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500"
-            />
+          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-950/60">
+            <div className="text-xs">
+              <div className="font-medium text-slate-800 dark:text-slate-200">
+                应用启动密码保护
+              </div>
+              <div className="mt-0.5 text-slate-500 dark:text-slate-400">
+                关闭后打开应用将直接进入工作台（依赖飞牛 NAS 系统本身登录鉴权）；如需二次密码保护可随时重新开启。
+              </div>
+            </div>
+            <div className="shrink-0">
+              {settings?.auth_disabled ? (
+                <button
+                  type="button"
+                  disabled={authToggling || !settings?.password_set}
+                  onClick={() => handleToggleAuthDisabled(false)}
+                  title={!settings?.password_set ? '请先在下方设置启动密码' : '开启启动密码保护'}
+                  className="rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {authToggling ? '处理中...' : '开启启动密码'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={authToggling}
+                  onClick={() => handleToggleAuthDisabled(true)}
+                  className="rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 transition hover:border-amber-400 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  {authToggling ? '处理中...' : '关闭密码（无密码直进）'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <form
+            onSubmit={handleChangePassword}
+            className={`grid grid-cols-1 gap-3 ${
+              settings?.password_set ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+            }`}
+          >
+            {settings?.password_set && (
+              <input
+                type="password"
+                value={curPwd}
+                onChange={(e) => setCurPwd(e.target.value)}
+                placeholder="当前密码"
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500"
+              />
+            )}
             <input
               type="password"
               value={newPwd}
               onChange={(e) => setNewPwd(e.target.value)}
-              placeholder="新密码（至少 6 位）"
+              placeholder={settings?.password_set ? '新密码（至少 6 位）' : '设置启动密码（至少 6 位）'}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500"
             />
             <button
               type="submit"
-              disabled={!curPwd || !newPwd}
+              disabled={(settings?.password_set ? !curPwd : false) || !newPwd}
               className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-medium text-slate-800 transition hover:bg-indigo-600 hover:text-white disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             >
-              更新密码
+              {settings?.password_set ? '更新密码' : '设置密码并开启保护'}
             </button>
           </form>
 

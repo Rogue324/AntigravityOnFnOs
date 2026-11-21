@@ -6,6 +6,7 @@ export type PermissionMode = 'default' | 'accept-edits' | 'plan' | 'bypass';
 export interface AuthStatus {
   initialized: boolean;
   authenticated: boolean;
+  auth_disabled?: boolean;
 }
 
 export interface ModelOption {
@@ -24,6 +25,8 @@ export interface AppSettings {
   default_workspace: string;
   agy_binary_path: string;
   persistent_idle_minutes: number;
+  auth_disabled: boolean;
+  password_set: boolean;
   data_dir: string;
   home_dir: string;
   bin_dir: string;

@@ -33,7 +33,6 @@ export default function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [agyStatus, setAgyStatus] = useState<AgyStatus | null>(null);
@@ -234,20 +233,10 @@ export default function App() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-slate-50 text-slate-900 lg:flex-row dark:bg-slate-950 dark:text-slate-100">
-      {/* Mobile / compact-window top bar (< 1024px, or when desktop sidebar is collapsed) */}
-      <div
-        className={`flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900 ${
-          desktopCollapsed ? '' : 'lg:hidden'
-        }`}
-      >
+      {/* Mobile / narrow-window top bar (< 1024px) */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5 lg:hidden dark:border-slate-800 dark:bg-slate-900">
         <button
-          onClick={() => {
-            if (window.innerWidth >= 1024) {
-              setDesktopCollapsed(false);
-            } else {
-              setMobileMenuOpen(true);
-            }
-          }}
+          onClick={() => setMobileMenuOpen(true)}
           aria-label="打开菜单"
           className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
         >
@@ -301,10 +290,9 @@ export default function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
         onLogout={handleLogout}
+        authDisabled={Boolean(settings?.auth_disabled ?? auth.auth_disabled)}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
-        desktopCollapsed={desktopCollapsed}
-        onCollapseDesktop={() => setDesktopCollapsed(true)}
       />
 
       <main className="min-h-0 min-w-0 flex-1 overflow-hidden">

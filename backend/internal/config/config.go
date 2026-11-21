@@ -22,6 +22,7 @@ type Config struct {
 	DefaultWorkspace      string `json:"default_workspace"`
 	AgyBinaryPath         string `json:"agy_binary_path"`
 	PersistentIdleMinutes int    `json:"persistent_idle_minutes"` // 0 = disabled, default 10
+	AuthDisabled          bool   `json:"auth_disabled"`
 }
 
 // PublicConfig is the sanitized configuration returned to the frontend.
@@ -36,6 +37,8 @@ type PublicConfig struct {
 	DefaultWorkspace      string `json:"default_workspace"`
 	AgyBinaryPath         string `json:"agy_binary_path"`
 	PersistentIdleMinutes int    `json:"persistent_idle_minutes"`
+	AuthDisabled          bool   `json:"auth_disabled"`
+	PasswordSet           bool   `json:"password_set"`
 	DataDir               string `json:"data_dir"`
 	HomeDir               string `json:"home_dir"`
 	BinDir                string `json:"bin_dir"`
@@ -156,6 +159,8 @@ func (s *Store) Public() PublicConfig {
 		DefaultWorkspace:      s.cfg.DefaultWorkspace,
 		AgyBinaryPath:         s.cfg.AgyBinaryPath,
 		PersistentIdleMinutes: s.cfg.PersistentIdleMinutes,
+		AuthDisabled:          s.cfg.AuthDisabled,
+		PasswordSet:           s.cfg.PasswordHash != "",
 		DataDir:               s.paths.DataDir,
 		HomeDir:               s.paths.HomeDir,
 		BinDir:                s.paths.BinDir,

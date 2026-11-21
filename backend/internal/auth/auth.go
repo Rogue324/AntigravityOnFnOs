@@ -59,6 +59,23 @@ func (m *Manager) IsInitialized() bool {
 	return m.cfgStore.Get().PasswordHash != ""
 }
 
+func (m *Manager) IsAuthDisabled() bool {
+	return m.cfgStore.Get().AuthDisabled
+}
+
+func (m *Manager) SkipInitialSetup() error {
+	if m.IsInitialized() {
+		return ErrAlreadyInitialized
+	}
+	return m.cfgStore.Update(func(c *config.Config) {
+		c.AuthDisabled = true
+	})
+}
+
+func (m *Manager) IssueSession() (string, error) {
+	return m.createSession()
+}
+
 func (m *Manager) SetupPassword(password string) (string, error) {
 	if len(password) < 6 {
 		return "", ErrWeakPassword
@@ -72,6 +89,7 @@ func (m *Manager) SetupPassword(password string) (string, error) {
 	}
 	if err := m.cfgStore.Update(func(c *config.Config) {
 		c.PasswordHash = string(hash)
+		c.AuthDisabled = false
 	}); err != nil {
 		return "", err
 	}
@@ -101,11 +119,10 @@ func (m *Manager) ChangePassword(currentPassword, newPassword string) error {
 		return ErrWeakPassword
 	}
 	hash := m.cfgStore.Get().PasswordHash
-	if hash == "" {
-		return ErrNotInitialized
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(currentPassword)); err != nil {
-		return ErrInvalidPassword
+	if hash != "" {
+		if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(currentPassword)); err != nil {
+			return ErrInvalidPassword
+		}
 	}
 	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
@@ -113,6 +130,7 @@ func (m *Manager) ChangePassword(currentPassword, newPassword string) error {
 	}
 	return m.cfgStore.Update(func(c *config.Config) {
 		c.PasswordHash = string(newHash)
+		c.AuthDisabled = false
 	})
 }
 
@@ -126,6 +144,9 @@ func (m *Manager) Logout(token string) {
 }
 
 func (m *Manager) ValidateRequest(r *http.Request) (string, bool) {
+	if m.IsAuthDisabled() {
+		return "no-auth", true
+	}
 	token := ExtractToken(r)
 	if token == "" {
 		return "", false
