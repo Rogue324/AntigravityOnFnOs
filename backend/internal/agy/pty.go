@@ -40,9 +40,10 @@ func (m *Manager) ServePTY(conn *websocket.Conn, opts PTYOptions) error {
 		cwd = m.cfgStore.Paths().HomeDir
 	}
 
+	shellBin := m.ResolveShell()
 	var cmd *exec.Cmd
 	if opts.Mode == "shell" {
-		cmd = exec.Command("bash", "-l")
+		cmd = exec.Command(shellBin, "-l")
 	} else {
 		bin := m.ResolveBinary()
 		if bin != "" {
@@ -53,8 +54,8 @@ func (m *Manager) ServePTY(conn *websocket.Conn, opts PTYOptions) error {
 			cmd = exec.Command(bin, args...)
 		} else {
 			// Helpful fallback shell if agy isn't installed yet
-			banner := `echo -e "\033[1;33m[Antigravity for fnOS]\033[0m 未检测到 agy，可前往「设置中心」一键安装，或直接在此运行：\n  curl -fsSL https://antigravity.google/cli/install.sh | bash\n"; exec bash`
-			cmd = exec.Command("bash", "-c", banner)
+			banner := fmt.Sprintf(`printf "\033[1;33m[Antigravity for fnOS]\033[0m 未检测到 agy，可前往「设置中心」一键安装，或直接在此运行：\n  curl -fsSL https://antigravity.google/cli/install.sh | bash\n\n"; exec %q`, shellBin)
+			cmd = exec.Command(shellBin, "-c", banner)
 		}
 	}
 

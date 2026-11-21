@@ -1,6 +1,8 @@
 #!/bin/bash
 set -u
 
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
 APP_BIN="${TRIM_APPDEST}/server/agy-fnos"
 DATA_DIR="${TRIM_PKGVAR}"
 LOG_FILE="${DATA_DIR}/app.log"

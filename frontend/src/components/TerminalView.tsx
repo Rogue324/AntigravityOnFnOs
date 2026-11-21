@@ -11,17 +11,33 @@ import {
   Info,
 } from 'lucide-react';
 import { api, wsUrl } from '../api/client';
-import type { AppSettings, TerminalLaunchRequest } from '../types';
+import type { AppSettings, TerminalLaunchRequest, ThemeMode } from '../types';
 import { DirPickerModal } from './DirPickerModal';
 
 interface TerminalViewProps {
   settings: AppSettings | null;
+  theme: ThemeMode;
   launchRequest: TerminalLaunchRequest | null;
   onStatusRefresh: () => void;
 }
 
+const LIGHT_XTERM_THEME = {
+  background: '#f8fafc',
+  foreground: '#0f172a',
+  cursor: '#4f46e5',
+  selectionBackground: 'rgba(99, 102, 241, 0.25)',
+};
+
+const DARK_XTERM_THEME = {
+  background: '#090d16',
+  foreground: '#e2e8f0',
+  cursor: '#818cf8',
+  selectionBackground: 'rgba(99, 102, 241, 0.35)',
+};
+
 export const TerminalView: React.FC<TerminalViewProps> = ({
   settings,
+  theme,
   launchRequest,
   onStatusRefresh,
 }) => {
@@ -40,6 +56,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const termRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Dynamically update xterm palette when user toggles theme without reconnecting PTY
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.theme = theme === 'dark' ? DARK_XTERM_THEME : LIGHT_XTERM_THEME;
+    }
+  }, [theme]);
+
   // Sync external handoff request (e.g., "Open in Terminal" from ChatView)
   useEffect(() => {
     if (!launchRequest) return;
@@ -57,12 +80,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       fontSize: 13.5,
       fontFamily:
         'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-      theme: {
-        background: '#090d16',
-        foreground: '#e2e8f0',
-        cursor: '#818cf8',
-        selectionBackground: 'rgba(99, 102, 241, 0.35)',
-      },
+      theme: theme === 'dark' ? DARK_XTERM_THEME : LIGHT_XTERM_THEME,
       scrollback: 5000,
     });
 
@@ -170,16 +188,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   }, [mode, workspace, conversationId, reconnectNonce]);
 
   return (
-    <div className="flex h-full flex-col bg-[#090d16]">
+    <div className="flex h-full flex-col bg-slate-50 dark:bg-[#090d16]">
       {/* Toolbar */}
-      <header className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-900/90 px-4 py-2.5">
-        <div className="flex items-center rounded-lg border border-slate-800 bg-slate-950 p-0.5 text-xs">
+      <header className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/90">
+        <div className="flex items-center rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs dark:border-slate-800 dark:bg-slate-950">
           <button
             onClick={() => setMode('agy')}
             className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition ${
               mode === 'agy'
                 ? 'bg-indigo-600 text-white'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             <Sparkles className="h-3.5 w-3.5" />
@@ -193,7 +211,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition ${
               mode === 'shell'
                 ? 'bg-indigo-600 text-white'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             <Terminal className="h-3.5 w-3.5" />
@@ -203,14 +221,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
         <button
           onClick={() => setPickerOpen(true)}
-          className="flex max-w-xs items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 hover:border-indigo-500/60"
+          className="flex max-w-xs items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 hover:border-indigo-500/60 dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-200"
         >
-          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
           <span className="truncate font-mono">{workspace}</span>
         </button>
 
         {conversationId && (
-          <span className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 font-mono text-[11px] text-indigo-300">
+          <span className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 font-mono text-[11px] text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
             会话: {conversationId.slice(0, 10)}…
           </span>
         )}
@@ -219,19 +237,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           <span
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
               connState === 'connected'
-                ? 'bg-emerald-500/15 text-emerald-300'
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
                 : connState === 'connecting'
-                ? 'bg-amber-500/15 text-amber-300'
-                : 'bg-rose-500/15 text-rose-300'
+                ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+                : 'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
             }`}
           >
             <span
               className={`h-1.5 w-1.5 rounded-full ${
                 connState === 'connected'
-                  ? 'bg-emerald-400'
+                  ? 'bg-emerald-500 dark:bg-emerald-400'
                   : connState === 'connecting'
-                  ? 'animate-pulse bg-amber-400'
-                  : 'bg-rose-400'
+                  ? 'animate-pulse bg-amber-500 dark:bg-amber-400'
+                  : 'bg-rose-500 dark:bg-rose-400'
               }`}
             />
             {connState === 'connected'
@@ -243,7 +261,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
           <button
             onClick={() => termRef.current?.clear()}
-            className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white"
+            className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           >
             <Trash2 className="h-3.5 w-3.5" />
             <span>清屏</span>
@@ -251,7 +269,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
           <button
             onClick={() => setReconnectNonce((n) => n + 1)}
-            className="flex items-center gap-1 rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs text-slate-200 hover:bg-indigo-600 hover:text-white"
+            className="flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 hover:bg-indigo-600 hover:text-white dark:bg-slate-800 dark:text-slate-200"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             <span>重连</span>
@@ -260,12 +278,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       </header>
 
       {/* Helpful tip for NAS headless OAuth */}
-      <div className="flex items-center gap-2 border-b border-slate-800/70 bg-slate-900/40 px-4 py-1.5 text-[11px] text-slate-400">
-        <Info className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+      <div className="flex items-center gap-2 border-b border-slate-200/80 bg-slate-100/70 px-4 py-1.5 text-[11px] text-slate-600 dark:border-slate-800/70 dark:bg-slate-900/40 dark:text-slate-400">
+        <Info className="h-3.5 w-3.5 shrink-0 text-indigo-500 dark:text-indigo-400" />
         <span>
-          首次登录或使用 <code className="text-slate-300">/mcp</code>、
-          <code className="text-slate-300">/skills</code>、
-          <code className="text-slate-300">/diff</code> 等 TUI 命令请直接在此交互；已自动注入设置中心的代理与隔离 HOME 目录。
+          首次登录或使用 <code className="text-slate-800 dark:text-slate-300">/mcp</code>、
+          <code className="text-slate-800 dark:text-slate-300">/skills</code>、
+          <code className="text-slate-800 dark:text-slate-300">/diff</code> 等 TUI 命令请直接在此交互；已自动注入设置中心的代理与隔离 HOME 目录。
         </span>
       </div>
 

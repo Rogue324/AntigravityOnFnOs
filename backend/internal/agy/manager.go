@@ -20,6 +20,8 @@ import (
 
 const OfficialInstallURL = "https://antigravity.google/cli/install.sh"
 
+const defaultSystemPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 type Status struct {
 	Installed     bool   `json:"installed"`
 	BinaryPath    string `json:"binary_path"`
@@ -47,6 +49,28 @@ func NewManager(cfgStore *config.Store) *Manager {
 	return &Manager{cfgStore: cfgStore}
 }
 
+// ResolveShell returns an absolute path to bash or sh without relying on daemon PATH.
+func (m *Manager) ResolveShell() string {
+	for _, candidate := range []string{
+		"/bin/bash",
+		"/usr/bin/bash",
+		"/usr/local/bin/bash",
+		"/bin/sh",
+		"/usr/bin/sh",
+	} {
+		if st, err := os.Stat(candidate); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+			return candidate
+		}
+	}
+	if p, err := exec.LookPath("bash"); err == nil {
+		return p
+	}
+	if p, err := exec.LookPath("sh"); err == nil {
+		return p
+	}
+	return "/bin/sh"
+}
+
 // ResolveBinary locates the agy executable across custom, app-local, and system paths.
 func (m *Manager) ResolveBinary() string {
 	cfg := m.cfgStore.Get()
@@ -60,6 +84,8 @@ func (m *Manager) ResolveBinary() string {
 		filepath.Join(paths.BinDir, "agy"),
 		filepath.Join(paths.HomeDir, ".local", "bin", "agy"),
 		filepath.Join(paths.HomeDir, ".antigravity", "bin", "agy"),
+		"/usr/local/bin/agy",
+		"/usr/bin/agy",
 	)
 
 	for _, c := range candidates {
@@ -79,16 +105,25 @@ func (m *Manager) BuildEnv(extra ...string) []string {
 	cfg := m.cfgStore.Get()
 	paths := m.cfgStore.Paths()
 
-	basePath := os.Getenv("PATH")
-	pathParts := []string{
-		paths.BinDir,
-		filepath.Join(paths.HomeDir, ".local", "bin"),
-		filepath.Join(paths.HomeDir, ".antigravity", "bin"),
+	seenPath := make(map[string]bool)
+	var pathParts []string
+	addPath := func(p string) {
+		p = strings.TrimSpace(p)
+		if p == "" || seenPath[p] {
+			return
+		}
+		seenPath[p] = true
+		pathParts = append(pathParts, p)
 	}
-	if basePath != "" {
-		pathParts = append(pathParts, basePath)
-	} else {
-		pathParts = append(pathParts, "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+
+	addPath(paths.BinDir)
+	addPath(filepath.Join(paths.HomeDir, ".local", "bin"))
+	addPath(filepath.Join(paths.HomeDir, ".antigravity", "bin"))
+	for _, p := range strings.Split(os.Getenv("PATH"), ":") {
+		addPath(p)
+	}
+	for _, p := range strings.Split(defaultSystemPath, ":") {
+		addPath(p)
 	}
 
 	envMap := make(map[string]string)
@@ -174,7 +209,6 @@ func (m *Manager) GetStatus(ctx context.Context) Status {
 }
 
 func (m *Manager) hasCredentials(homeDir string) bool {
-	// Check common credential directories created by agy / Gemini CLI
 	checkDirs := []string{
 		filepath.Join(homeDir, ".gemini"),
 		filepath.Join(homeDir, ".config", "antigravity"),
@@ -189,7 +223,27 @@ func (m *Manager) hasCredentials(homeDir string) bool {
 	return false
 }
 
-// InstallOrUpgrade downloads and executes the official agy install script, streaming log lines.
+func (m *Manager) httpClientWithProxy(httpProxy, httpsProxy string, timeout time.Duration) (*http.Client, error) {
+	proxyStr := strings.TrimSpace(httpsProxy)
+	if proxyStr == "" {
+		proxyStr = strings.TrimSpace(httpProxy)
+	}
+	transport := &http.Transport{}
+	if proxyStr != "" {
+		parsed, err := url.Parse(proxyStr)
+		if err != nil {
+			return nil, fmt.Errorf("代理地址格式无效: %w", err)
+		}
+		transport.Proxy = http.ProxyURL(parsed)
+	}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   timeout,
+	}, nil
+}
+
+// InstallOrUpgrade downloads the official agy install script via Go HTTP (respecting proxy)
+// and executes it with an absolute shell path, streaming log lines.
 func (m *Manager) InstallOrUpgrade(ctx context.Context, onLog func(line string)) error {
 	m.installMu.Lock()
 	if m.installing {
@@ -205,25 +259,49 @@ func (m *Manager) InstallOrUpgrade(ctx context.Context, onLog func(line string))
 		m.installMu.Unlock()
 	}()
 
+	cfg := m.cfgStore.Get()
 	paths := m.cfgStore.Paths()
 	if err := os.MkdirAll(paths.BinDir, 0o750); err != nil {
 		return err
 	}
 
+	shellBin := m.ResolveShell()
 	onLog(fmt.Sprintf("[info] Downloading installer from %s ...", OfficialInstallURL))
-	onLog(fmt.Sprintf("[info] Target HOME=%s, BIN=%s", paths.HomeDir, paths.BinDir))
+	onLog(fmt.Sprintf("[info] Target HOME=%s, BIN=%s, SHELL=%s", paths.HomeDir, paths.BinDir, shellBin))
 
-	script := fmt.Sprintf(
-		`set -euo pipefail
-export INSTALL_DIR=%q
-curl -fsSL %q | bash
-`,
-		paths.BinDir,
-		OfficialInstallURL,
-	)
+	client, err := m.httpClientWithProxy(cfg.HTTPProxy, cfg.HTTPSProxy, 45*time.Second)
+	if err != nil {
+		return err
+	}
 
-	cmd := exec.CommandContext(ctx, "bash", "-c", script)
-	cmd.Env = m.BuildEnv()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, OfficialInstallURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("下载安装脚本失败（请检查网络或代理配置）: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("下载安装脚本返回异常状态码: HTTP %d", resp.StatusCode)
+	}
+
+	scriptBytes, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
+	if err != nil {
+		return fmt.Errorf("读取安装脚本失败: %w", err)
+	}
+
+	scriptFile := filepath.Join(paths.DataDir, "install-agy.sh")
+	if err := os.WriteFile(scriptFile, scriptBytes, 0o700); err != nil {
+		return fmt.Errorf("写入临时安装脚本失败: %w", err)
+	}
+	defer os.Remove(scriptFile)
+
+	onLog("[info] Running installer script...")
+	cmd := exec.CommandContext(ctx, shellBin, scriptFile)
+	cmd.Env = m.BuildEnv("INSTALL_DIR=" + paths.BinDir)
 	cmd.Dir = paths.HomeDir
 
 	pr, pw := io.Pipe()
@@ -275,30 +353,14 @@ func (m *Manager) TestProxy(ctx context.Context, httpProxy, httpsProxy string) P
 	target := "https://antigravity.google"
 	start := time.Now()
 
-	proxyStr := strings.TrimSpace(httpsProxy)
-	if proxyStr == "" {
-		proxyStr = strings.TrimSpace(httpProxy)
-	}
-
-	transport := &http.Transport{
-		Proxy: nil,
-	}
-	if proxyStr != "" {
-		parsed, err := url.Parse(proxyStr)
-		if err != nil {
-			return ProxyTestResult{
-				OK:        false,
-				LatencyMs: time.Since(start).Milliseconds(),
-				Error:     "代理地址格式无效: " + err.Error(),
-				TargetURL: target,
-			}
+	client, err := m.httpClientWithProxy(httpProxy, httpsProxy, 8*time.Second)
+	if err != nil {
+		return ProxyTestResult{
+			OK:        false,
+			LatencyMs: time.Since(start).Milliseconds(),
+			Error:     err.Error(),
+			TargetURL: target,
 		}
-		transport.Proxy = http.ProxyURL(parsed)
-	}
-
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   8 * time.Second,
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, target, nil)

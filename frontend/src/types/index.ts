@@ -1,4 +1,5 @@
 export type ActiveTab = 'chat' | 'terminal' | 'settings';
+export type ThemeMode = 'light' | 'dark';
 
 export type PermissionMode = 'default' | 'accept-edits' | 'plan' | 'bypass';
 

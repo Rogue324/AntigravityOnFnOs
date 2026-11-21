@@ -48,10 +48,10 @@ const ThinkingBlock: React.FC<{ thinking: string; defaultOpen?: boolean }> = ({
   if (!thinking) return null;
 
   return (
-    <div className="mb-3 overflow-hidden rounded-xl border border-indigo-500/20 bg-indigo-950/20">
+    <div className="mb-3 overflow-hidden rounded-xl border border-indigo-200 bg-indigo-50/70 dark:border-indigo-500/20 dark:bg-indigo-950/20">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-indigo-300 hover:bg-indigo-500/10"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-indigo-700 hover:bg-indigo-100/70 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
       >
         <Brain className="h-3.5 w-3.5" />
         <span>思考过程</span>
@@ -60,7 +60,7 @@ const ThinkingBlock: React.FC<{ thinking: string; defaultOpen?: boolean }> = ({
         </span>
       </button>
       {open && (
-        <div className="border-t border-indigo-500/15 px-3 py-2.5 font-mono text-xs whitespace-pre-wrap text-slate-300/90">
+        <div className="border-t border-indigo-200/80 px-3 py-2.5 font-mono text-xs whitespace-pre-wrap text-slate-700 dark:border-indigo-500/15 dark:text-slate-300/90">
           {thinking}
         </div>
       )}
@@ -71,33 +71,37 @@ const ThinkingBlock: React.FC<{ thinking: string; defaultOpen?: boolean }> = ({
 const ToolCallCard: React.FC<{ tool: ToolCall }> = ({ tool }) => {
   const [open, setOpen] = useState(false);
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/70 text-xs">
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-xs dark:border-slate-700/80 dark:bg-slate-950/70">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-800/60"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800/60"
       >
         {tool.status === 'running' ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-400" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500 dark:text-amber-400" />
         ) : tool.status === 'error' ? (
-          <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+          <AlertTriangle className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
         ) : (
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
         )}
         <Wrench className="h-3.5 w-3.5 text-slate-400" />
-        <span className="font-mono font-medium text-slate-200">{tool.name || 'Tool'}</span>
-        <span className="ml-auto text-[10px] uppercase text-slate-500">{tool.status}</span>
+        <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
+          {tool.name || 'Tool'}
+        </span>
+        <span className="ml-auto text-[10px] uppercase text-slate-400 dark:text-slate-500">
+          {tool.status}
+        </span>
         {open ? (
-          <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+          <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
+          <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
         )}
       </button>
       {open && (
-        <div className="space-y-2 border-t border-slate-800 p-3 font-mono text-[11px]">
+        <div className="space-y-2 border-t border-slate-200 p-3 font-mono text-[11px] dark:border-slate-800">
           {tool.input && (
             <div>
               <div className="mb-1 text-slate-500">输入参数</div>
-              <pre className="max-h-48 overflow-auto rounded-lg bg-slate-900 p-2 text-slate-300">
+              <pre className="max-h-48 overflow-auto rounded-lg bg-white p-2 text-slate-800 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-0">
                 {tool.input}
               </pre>
             </div>
@@ -105,7 +109,7 @@ const ToolCallCard: React.FC<{ tool: ToolCall }> = ({ tool }) => {
           {tool.output && (
             <div>
               <div className="mb-1 text-slate-500">执行输出</div>
-              <pre className="max-h-56 overflow-auto rounded-lg bg-slate-900 p-2 text-slate-300">
+              <pre className="max-h-56 overflow-auto rounded-lg bg-white p-2 text-slate-800 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-0">
                 {tool.output}
               </pre>
             </div>
@@ -166,7 +170,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setInput('');
     setStreaming(true);
 
-    // Optimistically show user message
     const optimisticUser: ChatMessage = {
       id: `local-${Date.now()}`,
       role: 'user',
@@ -259,29 +262,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const messages = session?.messages || [];
 
   return (
-    <div className="flex h-full flex-col bg-slate-950">
+    <div className="flex h-full flex-col bg-slate-50 dark:bg-slate-950">
       {/* Top workspace & runtime toolbar */}
-      <header className="flex flex-wrap items-center gap-2 border-b border-slate-800/90 bg-slate-900/70 px-4 py-2.5 backdrop-blur">
+      <header className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white/90 px-4 py-2.5 backdrop-blur dark:border-slate-800/90 dark:bg-slate-900/70">
         <button
           onClick={() => setPickerMode('workspace')}
-          className="flex max-w-xs items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 transition hover:border-indigo-500/60"
+          className="flex max-w-xs items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 transition hover:border-indigo-500/60 dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-200"
           title="切换工作区目录 (cwd)"
         >
-          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
           <span className="truncate font-mono">{workspace}</span>
         </button>
 
         {extraDirs.map((dir) => (
           <span
             key={dir}
-            className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1 font-mono text-[11px] text-slate-300"
+            className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 px-2 py-1 font-mono text-[11px] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
           >
             <span className="max-w-[140px] truncate">+ {dir}</span>
             <button
               onClick={() =>
                 updateMeta({ extra_dirs: extraDirs.filter((d) => d !== dir) })
               }
-              className="text-slate-500 hover:text-rose-400"
+              className="text-slate-400 hover:text-rose-500"
             >
               <X className="h-3 w-3" />
             </button>
@@ -290,7 +293,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
         <button
           onClick={() => setPickerMode('extra')}
-          className="flex items-center gap-1 rounded-lg border border-dashed border-slate-700 px-2 py-1.5 text-[11px] text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+          className="flex items-center gap-1 rounded-lg border border-dashed border-slate-300 px-2 py-1.5 text-[11px] text-slate-500 transition hover:border-slate-400 hover:text-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
           title="添加附加上下文目录 (--add-dir)"
         >
           <Plus className="h-3 w-3" />
@@ -299,36 +302,36 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {/* Model */}
-          <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-xs">
+          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950">
             <Cpu className="h-3.5 w-3.5 text-slate-400" />
             <input
               type="text"
               value={model}
               onChange={(e) => updateMeta({ model: e.target.value })}
               placeholder="默认模型"
-              className="w-28 bg-transparent text-xs text-slate-200 placeholder-slate-500 focus:outline-none"
+              className="w-28 bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder-slate-500"
             />
           </div>
 
           {/* Permission Mode */}
-          <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-xs">
+          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950">
             <Shield className="h-3.5 w-3.5 text-slate-400" />
             <select
               value={permMode}
               onChange={(e) => updateMeta({ permission_mode: e.target.value })}
-              className="bg-transparent text-xs text-slate-200 focus:outline-none"
+              className="bg-transparent text-xs text-slate-700 focus:outline-none dark:text-slate-200"
             >
-              <option value="default" className="bg-slate-900">
+              <option value="default" className="bg-white dark:bg-slate-900">
                 标准模式 (default)
               </option>
-              <option value="accept-edits" className="bg-slate-900">
+              <option value="accept-edits" className="bg-white dark:bg-slate-900">
                 自动接受编辑 (accept-edits)
               </option>
-              <option value="plan" className="bg-slate-900">
+              <option value="plan" className="bg-white dark:bg-slate-900">
                 仅规划 (plan)
               </option>
               {settings?.allow_dangerous_skip && (
-                <option value="bypass" className="bg-slate-900">
+                <option value="bypass" className="bg-white dark:bg-slate-900">
                   跳过权限确认 (危险)
                 </option>
               )}
@@ -338,7 +341,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           {/* Handoff to Terminal */}
           <button
             onClick={() => onOpenInTerminal(workspace, session?.conversation_id)}
-            className="flex items-center gap-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1.5 text-xs font-medium text-indigo-300 transition hover:bg-indigo-500/20"
+            className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
             title="在内置终端中继续当前工作区或会话"
           >
             <Terminal className="h-3.5 w-3.5" />
@@ -349,9 +352,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
       {/* Setup warning banner if agy missing or unauthenticated */}
       {agyStatus && (!agyStatus.installed || !agyStatus.authenticated) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
             {!agyStatus.installed ? (
               <span>尚未检测到 Antigravity CLI (`agy`)，请先前往设置中心一键安装。</span>
             ) : (
@@ -361,14 +364,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
           {!agyStatus.installed ? (
             <button
               onClick={onGoToSettings}
-              className="rounded-lg bg-amber-500/20 px-2.5 py-1 font-medium text-amber-100 hover:bg-amber-500/30"
+              className="rounded-lg bg-amber-200/70 px-2.5 py-1 font-medium text-amber-900 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-100 dark:hover:bg-amber-500/30"
             >
               前往安装
             </button>
           ) : (
             <button
               onClick={onGoToTerminal}
-              className="rounded-lg bg-amber-500/20 px-2.5 py-1 font-medium text-amber-100 hover:bg-amber-500/30"
+              className="rounded-lg bg-amber-200/70 px-2.5 py-1 font-medium text-amber-900 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-100 dark:hover:bg-amber-500/30"
             >
               打开终端登录
             </button>
@@ -381,12 +384,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
         <div className="mx-auto max-w-4xl space-y-5">
           {messages.length === 0 && !draftMsg ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-600/20 ring-1 ring-indigo-500/30">
-                <Sparkles className="h-7 w-7 text-indigo-400" />
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 ring-1 ring-indigo-200 dark:bg-gradient-to-br dark:from-indigo-500/20 dark:to-violet-600/20 dark:ring-indigo-500/30">
+                <Sparkles className="h-7 w-7 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <h2 className="text-lg font-semibold text-white">开始与 Antigravity 对话</h2>
-              <p className="mt-1.5 max-w-md text-xs leading-relaxed text-slate-400">
-                当前工作区：<span className="font-mono text-slate-300">{workspace}</span>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                开始与 Antigravity 对话
+              </h2>
+              <p className="mt-1.5 max-w-md text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                当前工作区：<span className="font-mono text-slate-700 dark:text-slate-300">{workspace}</span>
                 <br />
                 支持直接分析 NAS 共享目录中的代码与文档，也可随时一键切至内置终端使用完整 TUI。
               </p>
@@ -401,7 +406,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   <button
                     key={sample}
                     onClick={() => handleSend(sample)}
-                    className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 text-left text-xs text-slate-300 transition hover:border-indigo-500/40 hover:bg-slate-900 hover:text-white"
+                    className="rounded-xl border border-slate-200 bg-white p-3 text-left text-xs text-slate-700 shadow-xs transition hover:border-indigo-400 hover:text-indigo-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:bg-slate-900 dark:hover:text-white"
                   >
                     {sample}
                   </button>
@@ -419,7 +424,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     {msg.content}
                   </div>
                 ) : (
-                  <div className="w-full max-w-[92%] rounded-2xl border border-slate-800/90 bg-slate-900/80 p-4 text-sm text-slate-100 shadow-sm">
+                  <div className="w-full max-w-[92%] rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-xs dark:border-slate-800/90 dark:bg-slate-900/80 dark:text-slate-100">
                     {msg.thinking && (
                       <ThinkingBlock
                         thinking={msg.thinking}
@@ -440,20 +445,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                       </div>
                     ) : msg.id.startsWith('stream-') && !msg.error ? (
-                      <div className="flex items-center gap-2 text-xs text-slate-400">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500 dark:text-indigo-400" />
                         <span>Antigravity 正在思考与执行...</span>
                       </div>
                     ) : null}
 
                     {msg.error && (
-                      <div className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 font-mono text-xs whitespace-pre-wrap text-rose-300">
+                      <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 font-mono text-xs whitespace-pre-wrap text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
                         {msg.error}
                       </div>
                     )}
 
                     {msg.usage && (
-                      <div className="mt-3 flex items-center gap-3 border-t border-slate-800/80 pt-2 text-[11px] text-slate-500">
+                      <div className="mt-3 flex items-center gap-3 border-t border-slate-200 pt-2 text-[11px] text-slate-400 dark:border-slate-800/80 dark:text-slate-500">
                         <span>输入: {msg.usage.input_tokens ?? 0}</span>
                         <span>输出: {msg.usage.output_tokens ?? 0}</span>
                         <span>总计: {msg.usage.total_tokens ?? 0} tokens</span>
@@ -469,8 +474,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
       </div>
 
       {/* Input composer */}
-      <div className="border-t border-slate-800/90 bg-slate-900/70 p-4">
-        <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-slate-700/80 bg-slate-950 p-2 focus-within:border-indigo-500/70">
+      <div className="border-t border-slate-200 bg-white/90 p-4 dark:border-slate-800/90 dark:bg-slate-900/70">
+        <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-xs focus-within:border-indigo-500 dark:border-slate-700/80 dark:bg-slate-950">
           <textarea
             rows={1}
             value={input}
@@ -482,7 +487,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               }
             }}
             placeholder="输入指令或问题（Enter 发送，Shift+Enter 换行）..."
-            className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2.5 py-2 text-sm text-white placeholder-slate-500 focus:outline-none"
+            className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2.5 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none dark:text-white dark:placeholder-slate-500"
           />
           {streaming ? (
             <button

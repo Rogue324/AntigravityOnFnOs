@@ -13,9 +13,21 @@ import type {
   ChatSession,
   SessionSummary,
   TerminalLaunchRequest,
+  ThemeMode,
 } from './types';
 
+function readInitialTheme(): ThemeMode {
+  try {
+    const saved = window.localStorage.getItem('agy_theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+  } catch {
+    // ignore
+  }
+  return 'light';
+}
+
 export default function App() {
+  const [theme, setTheme] = useState<ThemeMode>(readInitialTheme);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
 
@@ -26,6 +38,19 @@ export default function App() {
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
 
   const [termLaunch, setTermLaunch] = useState<TerminalLaunchRequest | null>(null);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    try {
+      window.localStorage.setItem('agy_theme', theme);
+    } catch {
+      // ignore
+    }
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  }, []);
 
   const loadAuth = useCallback(async () => {
     try {
@@ -54,7 +79,6 @@ export default function App() {
         setActiveSession(null);
       }
     } catch {
-      // If session expired, refresh auth status
       loadAuth();
     }
   }, [loadAuth]);
@@ -148,7 +172,7 @@ export default function App() {
 
   if (!auth) {
     return (
-      <div className="flex h-full items-center justify-center bg-slate-950 text-xs text-slate-400">
+      <div className="flex h-full items-center justify-center bg-slate-50 text-xs text-slate-500 dark:bg-slate-950 dark:text-slate-400">
         正在加载 Antigravity for fnOS...
       </div>
     );
@@ -158,13 +182,15 @@ export default function App() {
     return (
       <AuthGate
         initialized={auth.initialized}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onAuthenticated={() => setAuth({ initialized: true, authenticated: true })}
       />
     );
   }
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex h-full w-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <Sidebar
         activeTab={activeTab}
         onSelectTab={setActiveTab}
@@ -174,6 +200,8 @@ export default function App() {
         onNewSession={handleNewSession}
         onDeleteSession={handleDeleteSession}
         agyStatus={agyStatus}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onLogout={handleLogout}
       />
 
@@ -194,6 +222,7 @@ export default function App() {
         {activeTab === 'terminal' && (
           <TerminalView
             settings={settings}
+            theme={theme}
             launchRequest={termLaunch}
             onStatusRefresh={async () => {
               try {
