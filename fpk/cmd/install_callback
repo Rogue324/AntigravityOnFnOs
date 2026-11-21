@@ -1,2 +1,6 @@
 #!/bin/bash
+set -u
+if [ -n "${TRIM_PKGVAR:-}" ]; then
+  mkdir -p "${TRIM_PKGVAR}/home" "${TRIM_PKGVAR}/bin" 2>/dev/null || true
+fi
 exit 0

@@ -1,5 +1,3 @@
 #!/bin/bash
-set -e
-# Preserve ${TRIM_PKGVAR} (credentials, sessions, config, agy binary) across upgrades
-mkdir -p "${TRIM_PKGVAR}/home" "${TRIM_PKGVAR}/bin"
+# Preserve ${TRIM_PKGVAR} across upgrades; no pre-upgrade action needed.
 exit 0

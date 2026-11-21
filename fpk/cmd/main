@@ -37,6 +37,7 @@ start_app() {
 
   if [ ! -x "${APP_BIN}" ]; then
     log_msg "ERROR: binary not found or not executable: ${APP_BIN}"
+    printf 'Binary not found or not executable: %s\n' "${APP_BIN}" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
     exit 1
   fi
 
@@ -53,6 +54,7 @@ start_app() {
   sleep 1
   if ! check_process "${pid}"; then
     log_msg "ERROR: process exited immediately after start"
+    printf 'Antigravity exited immediately after start. Check %s\n' "${LOG_FILE}" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
     rm -f "${PID_FILE}"
     exit 1
   fi
