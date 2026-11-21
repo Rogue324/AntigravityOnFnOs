@@ -315,6 +315,14 @@ export default function App() {
             agyStatus={agyStatus}
             models={models}
             onRefreshModels={refreshModels}
+            onRefreshStatus={async () => {
+              try {
+                const st = await api.agyStatus();
+                setAgyStatus(st);
+              } catch {
+                // ignore
+              }
+            }}
             onSessionUpdated={handleSessionUpdated}
             onCreateSession={handleNewSession}
             onOpenInTerminal={handleOpenInTerminal}

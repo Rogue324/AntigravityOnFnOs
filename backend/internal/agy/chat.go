@@ -17,6 +17,7 @@ import (
 )
 
 type ChatRequest struct {
+	SessionID      string
 	Prompt         string
 	ConversationID string
 	Workspace      string
@@ -41,7 +42,7 @@ type ChatResult struct {
 	Message        session.Message
 }
 
-// RunChat executes `agy -p ... --output-format stream-json` and streams normalized events.
+// RunChat executes a turn via the persistent warm stream-json pool (when enabled) or one-shot `agy -p`.
 func (m *Manager) RunChat(ctx context.Context, req ChatRequest, emit func(ChatEvent)) (*ChatResult, error) {
 	bin := m.ResolveBinary()
 	if bin == "" {
@@ -49,6 +50,21 @@ func (m *Manager) RunChat(ctx context.Context, req ChatRequest, emit func(ChatEv
 	}
 
 	cfg := m.cfgStore.Get()
+	cwd := req.Workspace
+	if cwd == "" {
+		cwd = cfg.DefaultWorkspace
+	}
+	if st, err := os.Stat(cwd); err != nil || !st.IsDir() {
+		cwd = m.cfgStore.Paths().HomeDir
+	}
+
+	// Use warm persistent stream-json worker when idle timeout > 0, sessionID is set,
+	// and prompt is not a CLI-handled slash command (which requires standalone -p).
+	if cfg.PersistentIdleMinutes > 0 && req.SessionID != "" && !isSlashCommand(req.Prompt) {
+		idleTimeout := time.Duration(cfg.PersistentIdleMinutes) * time.Minute
+		return m.runPersistentTurn(ctx, req, bin, cwd, idleTimeout, emit)
+	}
+
 	args := []string{"-p", req.Prompt, "--output-format", "stream-json"}
 
 	if req.ConversationID != "" {
@@ -76,14 +92,6 @@ func (m *Manager) RunChat(ctx context.Context, req ChatRequest, emit func(ChatEv
 		if cfg.AllowDangerousSkip {
 			args = append(args, "--dangerously-skip-permissions")
 		}
-	}
-
-	cwd := req.Workspace
-	if cwd == "" {
-		cwd = cfg.DefaultWorkspace
-	}
-	if st, err := os.Stat(cwd); err != nil || !st.IsDir() {
-		cwd = m.cfgStore.Paths().HomeDir
 	}
 
 	cmd := exec.Command(bin, args...)

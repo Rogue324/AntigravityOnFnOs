@@ -1,6 +1,7 @@
 import type {
   AgyStatus,
   AppSettings,
+  Attachment,
   AuthStatus,
   BrowseResponse,
   ChatSSEEvent,
@@ -125,6 +126,28 @@ export const api = {
     request<{ ok: boolean }>(`/api/sessions/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
+
+  uploadFile: async (file: File, sessionId = 'shared'): Promise<Attachment> => {
+    const fd = new FormData();
+    fd.append('session_id', sessionId);
+    fd.append('file', file);
+    const res = await fetch(apiUrl('/api/uploads'), {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    });
+    if (!res.ok) {
+      let msg = `上传失败 (${res.status})`;
+      try {
+        const errBody = await res.json();
+        if (errBody?.error) msg = errBody.error;
+      } catch {
+        // ignore
+      }
+      throw new Error(msg);
+    }
+    return res.json() as Promise<Attachment>;
+  },
 };
 
 async function readSSEStream(
@@ -178,6 +201,7 @@ export async function streamSessionChat(
   sessionId: string,
   payload: {
     prompt: string;
+    attachments?: Attachment[];
     workspace?: string;
     extra_dirs?: string[];
     model?: string;

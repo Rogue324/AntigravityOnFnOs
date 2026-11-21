@@ -43,6 +43,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     allow_dangerous_skip: false,
     default_workspace: '',
     agy_binary_path: '',
+    persistent_idle_minutes: 10,
   });
 
   const [saving, setSaving] = useState(false);
@@ -73,6 +74,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       allow_dangerous_skip: !!settings.allow_dangerous_skip,
       default_workspace: settings.default_workspace || '',
       agy_binary_path: settings.agy_binary_path || '',
+      persistent_idle_minutes: settings.persistent_idle_minutes ?? 10,
     });
   }, [settings]);
 
@@ -438,7 +440,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </select>
             </div>
 
-            <div className="sm:col-span-2">
+            <div>
               <label className="mb-1 block text-xs text-slate-700 dark:text-slate-300">默认执行模式</label>
               <select
                 value={form.default_permission_mode}
@@ -452,6 +454,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <option value="plan">仅规划 (plan)</option>
                 {form.allow_dangerous_skip && <option value="bypass">跳过权限确认 (危险)</option>}
               </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-slate-700 dark:text-slate-300">
+                对话长连接空闲自动关闭时间
+              </label>
+              <select
+                value={form.persistent_idle_minutes}
+                onChange={(e) =>
+                  setForm({ ...form, persistent_idle_minutes: Number(e.target.value) })
+                }
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              >
+                <option value={0}>关闭长连接（每轮按需启动）</option>
+                <option value={5}>空闲 5 分钟后关闭</option>
+                <option value={10}>空闲 10 分钟后关闭（推荐）</option>
+                <option value={20}>空闲 20 分钟后关闭</option>
+                <option value={30}>空闲 30 分钟后关闭</option>
+                <option value={60}>空闲 60 分钟后关闭</option>
+              </select>
+              <p className="mt-1 text-[11px] text-slate-400">
+                保持进程常驻可显著降低多轮对话延迟；超时后自动关闭释放 NAS 内存，下次发消息自动重连。
+              </p>
             </div>
           </div>
 

@@ -23,12 +23,13 @@ const OfficialInstallURL = "https://antigravity.google/cli/install.sh"
 const defaultSystemPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 type Status struct {
-	Installed     bool   `json:"installed"`
-	BinaryPath    string `json:"binary_path"`
-	Version       string `json:"version"`
-	Authenticated bool   `json:"authenticated"`
-	HomeDir       string `json:"home_dir"`
-	ProxyActive   bool   `json:"proxy_active"`
+	Installed     bool     `json:"installed"`
+	BinaryPath    string   `json:"binary_path"`
+	Version       string   `json:"version"`
+	Authenticated bool     `json:"authenticated"`
+	HomeDir       string   `json:"home_dir"`
+	ProxyActive   bool     `json:"proxy_active"`
+	WarmSessions  []string `json:"warm_sessions,omitempty"`
 }
 
 type ProxyTestResult struct {
@@ -41,12 +42,28 @@ type ProxyTestResult struct {
 
 type Manager struct {
 	cfgStore   *config.Store
+	pool       *workerPool
 	installMu  sync.Mutex
 	installing bool
 }
 
 func NewManager(cfgStore *config.Store) *Manager {
-	return &Manager{cfgStore: cfgStore}
+	return &Manager{
+		cfgStore: cfgStore,
+		pool:     newWorkerPool(),
+	}
+}
+
+func (m *Manager) CloseSession(sessionID string) {
+	if m.pool != nil {
+		m.pool.closeSession(sessionID)
+	}
+}
+
+func (m *Manager) CloseAll() {
+	if m.pool != nil {
+		m.pool.closeAll()
+	}
 }
 
 // ResolveShell returns an absolute path to bash or sh without relying on daemon PATH.
@@ -193,6 +210,7 @@ func (m *Manager) GetStatus(ctx context.Context) Status {
 		HomeDir:       paths.HomeDir,
 		ProxyActive:   cfg.HTTPProxy != "" || cfg.HTTPSProxy != "",
 		Authenticated: m.hasCredentials(paths.HomeDir),
+		WarmSessions:  m.pool.activeSessionIDs(),
 	}
 
 	if bin != "" {

@@ -23,6 +23,7 @@ export interface AppSettings {
   allow_dangerous_skip: boolean;
   default_workspace: string;
   agy_binary_path: string;
+  persistent_idle_minutes: number;
   data_dir: string;
   home_dir: string;
   bin_dir: string;
@@ -35,6 +36,7 @@ export interface AgyStatus {
   authenticated: boolean;
   home_dir: string;
   proxy_active: boolean;
+  warm_sessions?: string[];
 }
 
 export interface ProxyTestResult {
@@ -78,10 +80,21 @@ export interface TokenUsage {
   total_tokens?: number;
 }
 
+export interface Attachment {
+  id: string;
+  name: string;
+  path: string;
+  url: string;
+  mime_type: string;
+  size: number;
+  is_image: boolean;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  attachments?: Attachment[];
   thinking?: string;
   tool_calls?: ToolCall[];
   usage?: TokenUsage;

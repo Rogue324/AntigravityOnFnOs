@@ -97,6 +97,7 @@ func main() {
 	<-stop
 
 	log.Println("Shutting down Antigravity for fnOS...")
+	agyMgr.CloseAll()
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(ctx); err != nil {

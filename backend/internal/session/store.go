@@ -27,15 +27,26 @@ type TokenUsage struct {
 	TotalTokens  int `json:"total_tokens,omitempty"`
 }
 
+type Attachment struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	URL      string `json:"url"`
+	MimeType string `json:"mime_type"`
+	Size     int64  `json:"size"`
+	IsImage  bool   `json:"is_image"`
+}
+
 type Message struct {
-	ID        string      `json:"id"`
-	Role      string      `json:"role"` // user | assistant
-	Content   string      `json:"content"`
-	Thinking  string      `json:"thinking,omitempty"`
-	ToolCalls []ToolCall  `json:"tool_calls,omitempty"`
-	Usage     *TokenUsage `json:"usage,omitempty"`
-	Error     string      `json:"error,omitempty"`
-	CreatedAt time.Time   `json:"created_at"`
+	ID          string       `json:"id"`
+	Role        string       `json:"role"` // user | assistant
+	Content     string       `json:"content"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+	Thinking    string       `json:"thinking,omitempty"`
+	ToolCalls   []ToolCall   `json:"tool_calls,omitempty"`
+	Usage       *TokenUsage  `json:"usage,omitempty"`
+	Error       string       `json:"error,omitempty"`
+	CreatedAt   time.Time    `json:"created_at"`
 }
 
 type Session struct {

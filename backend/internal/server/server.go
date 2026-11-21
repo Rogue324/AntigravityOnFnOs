@@ -94,6 +94,9 @@ func (s *Server) registerRoutes() {
 
 	s.mux.HandleFunc("GET /api/fs/browse", s.requireAuth(s.handleFSBrowse))
 
+	s.mux.HandleFunc("POST /api/uploads", s.requireAuth(s.handleUploadFile))
+	s.mux.HandleFunc("GET /api/uploads/{sessionId}/{filename}", s.requireAuth(s.handleServeUpload))
+
 	s.mux.HandleFunc("GET /api/sessions", s.requireAuth(s.handleListSessions))
 	s.mux.HandleFunc("POST /api/sessions", s.requireAuth(s.handleCreateSession))
 	s.mux.HandleFunc("GET /api/sessions/{id}", s.requireAuth(s.handleGetSession))
@@ -223,6 +226,7 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		AllowDangerousSkip    *bool   `json:"allow_dangerous_skip"`
 		DefaultWorkspace      *string `json:"default_workspace"`
 		AgyBinaryPath         *string `json:"agy_binary_path"`
+		PersistentIdleMinutes *int    `json:"persistent_idle_minutes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "请求格式错误")
@@ -261,10 +265,23 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		if body.AgyBinaryPath != nil {
 			c.AgyBinaryPath = strings.TrimSpace(*body.AgyBinaryPath)
 		}
+		if body.PersistentIdleMinutes != nil {
+			mins := *body.PersistentIdleMinutes
+			if mins < 0 {
+				mins = 0
+			}
+			if mins > 120 {
+				mins = 120
+			}
+			c.PersistentIdleMinutes = mins
+		}
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if body.PersistentIdleMinutes != nil && *body.PersistentIdleMinutes == 0 {
+		s.agyMgr.CloseAll()
 	}
 	writeJSON(w, http.StatusOK, s.cfgStore.Public())
 }
@@ -431,6 +448,7 @@ func (s *Server) handleUpdateSession(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	s.agyMgr.CloseSession(id)
 	if err := s.sessStore.Delete(id); err != nil {
 		if errors.Is(err, session.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "会话不存在")
@@ -455,20 +473,21 @@ func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Prompt         string   `json:"prompt"`
-		Workspace      string   `json:"workspace,omitempty"`
-		ExtraDirs      []string `json:"extra_dirs,omitempty"`
-		Model          string   `json:"model,omitempty"`
-		Effort         string   `json:"effort,omitempty"`
-		PermissionMode string   `json:"permission_mode,omitempty"`
+		Prompt         string               `json:"prompt"`
+		Attachments    []session.Attachment `json:"attachments,omitempty"`
+		Workspace      string               `json:"workspace,omitempty"`
+		ExtraDirs      []string             `json:"extra_dirs,omitempty"`
+		Model          string               `json:"model,omitempty"`
+		Effort         string               `json:"effort,omitempty"`
+		PermissionMode string               `json:"permission_mode,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
 	prompt := strings.TrimSpace(body.Prompt)
-	if prompt == "" {
-		writeError(w, http.StatusBadRequest, "消息内容不能为空")
+	if prompt == "" && len(body.Attachments) == 0 {
+		writeError(w, http.StatusBadRequest, "消息内容和附件不能同时为空")
 		return
 	}
 
@@ -490,7 +509,11 @@ func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
 			cur.PermissionMode = body.PermissionMode
 		}
 		if len(cur.Messages) == 0 && (cur.Title == "" || cur.Title == "新对话") {
-			cur.Title = truncateTitle(prompt, 28)
+			titleSrc := prompt
+			if titleSrc == "" && len(body.Attachments) > 0 {
+				titleSrc = "附件: " + body.Attachments[0].Name
+			}
+			cur.Title = truncateTitle(titleSrc, 28)
 		}
 	})
 	if err != nil {
@@ -500,11 +523,46 @@ func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
 
 	// Persist user message immediately
 	if _, err := s.sessStore.AppendMessage(id, session.Message{
-		Role:    "user",
-		Content: prompt,
+		Role:        "user",
+		Content:     prompt,
+		Attachments: body.Attachments,
 	}); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	// Build effective prompt + extraDirs when attachments are included
+	effectivePrompt := prompt
+	effectiveExtraDirs := append([]string(nil), sess.ExtraDirs...)
+	if len(body.Attachments) > 0 {
+		var sb strings.Builder
+		if effectivePrompt != "" {
+			sb.WriteString(effectivePrompt)
+			sb.WriteString("\n\n")
+		} else {
+			sb.WriteString("请查看并分析以下附件：\n\n")
+		}
+		sb.WriteString("附带文件（位于本地磁盘，请直接读取）：\n")
+		for _, att := range body.Attachments {
+			kind := "文件"
+			if att.IsImage {
+				kind = "图片"
+			}
+			sb.WriteString(fmt.Sprintf("- [%s] %s (%s)\n", kind, att.Name, att.Path))
+		}
+		effectivePrompt = sb.String()
+
+		uploadDir := s.uploadsBaseDir()
+		hasUploadDir := false
+		for _, d := range effectiveExtraDirs {
+			if d == uploadDir {
+				hasUploadDir = true
+				break
+			}
+		}
+		if !hasUploadDir {
+			effectiveExtraDirs = append(effectiveExtraDirs, uploadDir)
+		}
 	}
 
 	flusher, ok := prepareSSE(w)
@@ -514,10 +572,11 @@ func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, runErr := s.agyMgr.RunChat(r.Context(), agy.ChatRequest{
-		Prompt:         prompt,
+		SessionID:      sess.ID,
+		Prompt:         effectivePrompt,
 		ConversationID: sess.ConversationID,
 		Workspace:      sess.Workspace,
-		ExtraDirs:      sess.ExtraDirs,
+		ExtraDirs:      effectiveExtraDirs,
 		Model:          sess.Model,
 		Effort:         sess.Effort,
 		PermissionMode: sess.PermissionMode,

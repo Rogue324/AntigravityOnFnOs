@@ -21,6 +21,7 @@ type Config struct {
 	AllowDangerousSkip    bool   `json:"allow_dangerous_skip"`
 	DefaultWorkspace      string `json:"default_workspace"`
 	AgyBinaryPath         string `json:"agy_binary_path"`
+	PersistentIdleMinutes int    `json:"persistent_idle_minutes"` // 0 = disabled, default 10
 }
 
 // PublicConfig is the sanitized configuration returned to the frontend.
@@ -34,6 +35,7 @@ type PublicConfig struct {
 	AllowDangerousSkip    bool   `json:"allow_dangerous_skip"`
 	DefaultWorkspace      string `json:"default_workspace"`
 	AgyBinaryPath         string `json:"agy_binary_path"`
+	PersistentIdleMinutes int    `json:"persistent_idle_minutes"`
 	DataDir               string `json:"data_dir"`
 	HomeDir               string `json:"home_dir"`
 	BinDir                string `json:"bin_dir"`
@@ -119,6 +121,7 @@ func NewStore(paths Paths) (*Store, error) {
 			DefaultPermissionMode: "default",
 			AllowDangerousSkip:    false,
 			DefaultWorkspace:      defaultWS,
+			PersistentIdleMinutes: 10,
 		},
 	}
 
@@ -152,6 +155,7 @@ func (s *Store) Public() PublicConfig {
 		AllowDangerousSkip:    s.cfg.AllowDangerousSkip,
 		DefaultWorkspace:      s.cfg.DefaultWorkspace,
 		AgyBinaryPath:         s.cfg.AgyBinaryPath,
+		PersistentIdleMinutes: s.cfg.PersistentIdleMinutes,
 		DataDir:               s.paths.DataDir,
 		HomeDir:               s.paths.HomeDir,
 		BinDir:                s.paths.BinDir,
