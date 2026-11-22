@@ -27,14 +27,36 @@ type ChatRequest struct {
 	PermissionMode string
 }
 
+type PermissionOption struct {
+	OptionID string `json:"option_id"`
+	Name     string `json:"name"`
+	Kind     string `json:"kind"` // allow_once | allow_always | reject_once | reject_always
+}
+
+type PermissionRequest struct {
+	RequestID  string             `json:"request_id"`
+	SessionID  string             `json:"session_id"`
+	ToolCallID string             `json:"tool_call_id,omitempty"`
+	Title      string             `json:"title"`
+	Kind       string             `json:"kind,omitempty"`
+	Input      string             `json:"input,omitempty"`
+	Options    []PermissionOption `json:"options"`
+}
+
+type PermissionDecision struct {
+	OptionID  string
+	Cancelled bool
+}
+
 // ChatEvent is a normalized SSE event sent to the frontend during a chat turn.
 type ChatEvent struct {
-	Type           string              `json:"type"` // meta | thinking | text | tool_call | tool_result | usage | error | done
-	ConversationID string              `json:"conversation_id,omitempty"`
-	Delta          string              `json:"delta,omitempty"`
-	ToolCall       *session.ToolCall   `json:"tool_call,omitempty"`
-	Usage          *session.TokenUsage `json:"usage,omitempty"`
-	Error          string              `json:"error,omitempty"`
+	Type              string              `json:"type"` // meta | thinking | text | tool_call | tool_result | permission_request | permission_resolved | usage | error | done
+	ConversationID    string              `json:"conversation_id,omitempty"`
+	Delta             string              `json:"delta,omitempty"`
+	ToolCall          *session.ToolCall   `json:"tool_call,omitempty"`
+	PermissionRequest *PermissionRequest  `json:"permission_request,omitempty"`
+	Usage             *session.TokenUsage `json:"usage,omitempty"`
+	Error             string              `json:"error,omitempty"`
 }
 
 type ChatResult struct {
@@ -42,7 +64,7 @@ type ChatResult struct {
 	Message        session.Message
 }
 
-// RunChat executes a turn via the persistent warm stream-json pool (when enabled) or one-shot `agy -p`.
+// RunChat executes a turn via the official `agy acp` JSON-RPC 2.0 server.
 func (m *Manager) RunChat(ctx context.Context, req ChatRequest, emit func(ChatEvent)) (*ChatResult, error) {
 	bin := m.ResolveBinary()
 	if bin == "" {
@@ -58,13 +80,13 @@ func (m *Manager) RunChat(ctx context.Context, req ChatRequest, emit func(ChatEv
 		cwd = m.cfgStore.Paths().HomeDir
 	}
 
-	// Use warm persistent stream-json worker when idle timeout > 0, sessionID is set,
-	// and prompt is not a CLI-handled slash command (which requires standalone -p).
-	if cfg.PersistentIdleMinutes > 0 && req.SessionID != "" && !isSlashCommand(req.Prompt) {
-		idleTimeout := time.Duration(cfg.PersistentIdleMinutes) * time.Minute
-		return m.runPersistentTurn(ctx, req, bin, cwd, idleTimeout, emit)
-	}
+	idleTimeout := time.Duration(cfg.PersistentIdleMinutes) * time.Minute
+	return m.runACPTurn(ctx, req, bin, cwd, idleTimeout, emit)
+}
 
+// runLegacyStreamJSONChat is retained only as an internal reference; Web Chat uses ACP.
+func (m *Manager) runLegacyStreamJSONChat(ctx context.Context, req ChatRequest, bin, cwd string, emit func(ChatEvent)) (*ChatResult, error) {
+	cfg := m.cfgStore.Get()
 	args := []string{"-p", req.Prompt, "--output-format", "stream-json"}
 
 	if req.ConversationID != "" {

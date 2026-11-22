@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/config"
@@ -41,17 +42,23 @@ type ProxyTestResult struct {
 }
 
 type Manager struct {
-	cfgStore   *config.Store
-	pool       *workerPool
-	rc         *remoteControlSupervisor
-	installMu  sync.Mutex
-	installing bool
+	cfgStore     *config.Store
+	pool         *workerPool
+	acpPool      *acpPool
+	rc           *remoteControlSupervisor
+	permsMu      sync.Mutex
+	pendingPerms map[string]*pendingPermission
+	permSeq      atomic.Int64
+	installMu    sync.Mutex
+	installing   bool
 }
 
 func NewManager(cfgStore *config.Store) *Manager {
 	m := &Manager{
-		cfgStore: cfgStore,
-		pool:     newWorkerPool(),
+		cfgStore:     cfgStore,
+		pool:         newWorkerPool(),
+		acpPool:      newACPPool(),
+		pendingPerms: make(map[string]*pendingPermission),
 	}
 	m.rc = newRemoteControlSupervisor(m)
 	return m
@@ -94,18 +101,22 @@ func (m *Manager) CloseSession(sessionID string) {
 	if m.pool != nil {
 		m.pool.closeSession(sessionID)
 	}
+	if m.acpPool != nil {
+		m.acpPool.closeSession(sessionID)
+	}
 }
 
 func (m *Manager) CloseChatPool() {
 	if m.pool != nil {
 		m.pool.closeAll()
 	}
+	if m.acpPool != nil {
+		m.acpPool.closeAll()
+	}
 }
 
 func (m *Manager) CloseAll() {
-	if m.pool != nil {
-		m.pool.closeAll()
-	}
+	m.CloseChatPool()
 	if m.rc != nil {
 		m.rc.Stop()
 	}
@@ -255,7 +266,7 @@ func (m *Manager) GetStatus(ctx context.Context) Status {
 		HomeDir:       paths.HomeDir,
 		ProxyActive:   cfg.HTTPProxy != "" || cfg.HTTPSProxy != "",
 		Authenticated: m.hasCredentials(paths.HomeDir),
-		WarmSessions:  m.pool.activeSessionIDs(),
+		WarmSessions:  m.acpPool.activeSessionIDs(),
 	}
 
 	if bin != "" {

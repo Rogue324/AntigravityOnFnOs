@@ -137,6 +137,14 @@ export const api = {
     request<{ ok: boolean }>(`/api/sessions/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
+  respondPermission: (
+    sessionId: string,
+    payload: { request_id: string; option_id?: string; cancelled?: boolean }
+  ) =>
+    request<{ ok: boolean }>(`/api/sessions/${encodeURIComponent(sessionId)}/permission`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   uploadFile: async (file: File, sessionId = 'shared'): Promise<Attachment> => {
     const fd = new FormData();

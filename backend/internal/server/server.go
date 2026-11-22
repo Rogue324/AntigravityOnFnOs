@@ -107,6 +107,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("PATCH /api/sessions/{id}", s.requireAuth(s.handleUpdateSession))
 	s.mux.HandleFunc("DELETE /api/sessions/{id}", s.requireAuth(s.handleDeleteSession))
 	s.mux.HandleFunc("POST /api/sessions/{id}/chat", s.requireAuth(s.handleSessionChat))
+	s.mux.HandleFunc("POST /api/sessions/{id}/permission", s.requireAuth(s.handleSessionPermission))
 
 	// WebSocket terminal (validates either single-use ticket or session cookie)
 	s.mux.HandleFunc("GET /api/terminal/ws", s.handleTerminalWS)
@@ -677,6 +678,31 @@ func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
 		})
 		_, _ = s.sessStore.AppendMessage(id, result.Message)
 	}
+}
+
+func (s *Server) handleSessionPermission(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		RequestID string `json:"request_id"`
+		OptionID  string `json:"option_id"`
+		Cancelled bool   `json:"cancelled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	if strings.TrimSpace(body.RequestID) == "" {
+		writeError(w, http.StatusBadRequest, "缺少 request_id")
+		return
+	}
+	if err := s.agyMgr.ResolvePermission(id, body.RequestID, agy.PermissionDecision{
+		OptionID:  body.OptionID,
+		Cancelled: body.Cancelled,
+	}); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {

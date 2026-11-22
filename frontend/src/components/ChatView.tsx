@@ -35,6 +35,7 @@ import type {
   ChatMessage,
   ChatSession,
   ModelOption,
+  PermissionRequest,
   ToolCall,
 } from '../types';
 import { DirPickerModal } from './DirPickerModal';
@@ -194,6 +195,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [slashManualOpen, setSlashManualOpen] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
 
+  // Interactive ACP permission approval state
+  const [pendingPerms, setPendingPerms] = useState<PermissionRequest[]>([]);
+  const [submittingPermId, setSubmittingPermId] = useState<string | null>(null);
+
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -202,13 +207,43 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [session?.messages.length, draftMsg?.content, draftMsg?.thinking, draftMsg?.tool_calls?.length]);
+  }, [
+    session?.messages.length,
+    draftMsg?.content,
+    draftMsg?.thinking,
+    draftMsg?.tool_calls?.length,
+    pendingPerms.length,
+  ]);
 
-  // Clear pending attachments when switching sessions
+  // Clear pending attachments & permissions when switching sessions
   useEffect(() => {
     setPendingAttachments([]);
     setUploadError(null);
+    setPendingPerms([]);
+    setSubmittingPermId(null);
   }, [session?.id]);
+
+  const handlePermissionDecision = async (
+    req: PermissionRequest,
+    optionId?: string,
+    cancelled = false
+  ) => {
+    if (submittingPermId === req.request_id) return;
+    setSubmittingPermId(req.request_id);
+    try {
+      await api.respondPermission(req.session_id, {
+        request_id: req.request_id,
+        option_id: optionId,
+        cancelled,
+      });
+      setPendingPerms((prev) => prev.filter((p) => p.request_id !== req.request_id));
+    } catch {
+      // Remove stale prompt if already expired
+      setPendingPerms((prev) => prev.filter((p) => p.request_id !== req.request_id));
+    } finally {
+      setSubmittingPermId(null);
+    }
+  };
 
   // Determine whether slash command popover should be shown
   const slashQuery = useMemo(() => {
@@ -377,6 +412,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
             }
             liveAssistant.tool_calls = list;
             setDraftMsg({ ...liveAssistant });
+          } else if (ev.type === 'permission_request' && ev.permission_request) {
+            const req = ev.permission_request;
+            setPendingPerms((prev) =>
+              prev.some((p) => p.request_id === req.request_id) ? prev : [...prev, req]
+            );
+          } else if (ev.type === 'permission_resolved' && ev.permission_request) {
+            const rid = ev.permission_request.request_id;
+            setPendingPerms((prev) => prev.filter((p) => p.request_id !== rid));
           } else if (ev.type === 'usage' && ev.usage) {
             liveAssistant.usage = ev.usage;
             setDraftMsg({ ...liveAssistant });
@@ -396,6 +439,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
       abortRef.current = null;
       setStreaming(false);
       setDraftMsg(null);
+      setPendingPerms([]);
+      setSubmittingPermId(null);
       try {
         const fresh = await api.getSession(active.id);
         onSessionUpdated(fresh);
@@ -778,6 +823,80 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </div>
             ))
           )}
+
+          {/* Interactive ACP Permission Approval Cards */}
+          {pendingPerms.map((perm) => {
+            const busy = submittingPermId === perm.request_id;
+            return (
+              <div
+                key={perm.request_id}
+                className="rounded-2xl border-2 border-amber-300 bg-amber-50/90 p-4 shadow-sm dark:border-amber-500/50 dark:bg-amber-950/30"
+              >
+                <div className="flex items-start gap-2.5">
+                  <Shield className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+                        请求操作权限确认
+                      </span>
+                      {perm.kind && (
+                        <span className="rounded-md bg-amber-200/70 px-1.5 py-0.5 font-mono text-[10px] font-medium text-amber-900 dark:bg-amber-500/20 dark:text-amber-300">
+                          {perm.kind}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 text-xs font-medium text-slate-900 dark:text-slate-100">
+                      {perm.title}
+                    </div>
+                    {perm.input && (
+                      <pre className="mt-2 max-h-40 overflow-auto rounded-xl border border-amber-200/80 bg-white/90 p-2.5 font-mono text-[11px] whitespace-pre-wrap text-slate-800 dark:border-amber-500/20 dark:bg-slate-950/80 dark:text-slate-200">
+                        {perm.input}
+                      </pre>
+                    )}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {perm.options && perm.options.length > 0 ? (
+                        perm.options.map((opt) => {
+                          const isAllowOnce = opt.kind === 'allow_once';
+                          const isAllowAlways = opt.kind === 'allow_always';
+                          const isReject =
+                            opt.kind === 'reject_once' || opt.kind === 'reject_always';
+                          const btnClass = isAllowOnce
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                            : isAllowAlways
+                              ? 'bg-indigo-600 text-white hover:bg-indigo-500'
+                              : isReject
+                                ? 'border border-rose-300 bg-white text-rose-700 hover:bg-rose-50 dark:border-rose-500/40 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10'
+                                : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200';
+                          return (
+                            <button
+                              key={opt.option_id}
+                              type="button"
+                              disabled={busy}
+                              onClick={() => handlePermissionDecision(perm, opt.option_id, false)}
+                              className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${btnClass}`}
+                            >
+                              {busy && <Loader2 className="h-3 w-3 animate-spin" />}
+                              <span>{opt.name || opt.option_id}</span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handlePermissionDecision(perm, undefined, true)}
+                          className="rounded-xl border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-500/40 dark:bg-slate-900 dark:text-rose-300"
+                        >
+                          取消 / 拒绝
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
           <div ref={bottomRef} />
         </div>
       </div>

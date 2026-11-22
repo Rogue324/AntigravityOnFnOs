@@ -145,11 +145,38 @@ export interface ChatSession {
   updated_at: string;
 }
 
+export interface PermissionOption {
+  option_id: string;
+  name: string;
+  kind: string; // allow_once | allow_always | reject_once | reject_always
+}
+
+export interface PermissionRequest {
+  request_id: string;
+  session_id: string;
+  tool_call_id?: string;
+  title: string;
+  kind?: string;
+  input?: string;
+  options: PermissionOption[];
+}
+
 export interface ChatSSEEvent {
-  type: 'meta' | 'thinking' | 'text' | 'tool_call' | 'tool_result' | 'usage' | 'error' | 'done';
+  type:
+    | 'meta'
+    | 'thinking'
+    | 'text'
+    | 'tool_call'
+    | 'tool_result'
+    | 'permission_request'
+    | 'permission_resolved'
+    | 'usage'
+    | 'error'
+    | 'done';
   conversation_id?: string;
   delta?: string;
   tool_call?: ToolCall;
+  permission_request?: PermissionRequest;
   usage?: TokenUsage;
   error?: string;
 }
