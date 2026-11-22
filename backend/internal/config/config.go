@@ -23,6 +23,7 @@ type Config struct {
 	AgyBinaryPath         string `json:"agy_binary_path"`
 	PersistentIdleMinutes int    `json:"persistent_idle_minutes"` // 0 = disabled, default 10
 	AuthDisabled          bool   `json:"auth_disabled"`
+	RemoteControlEnabled  bool   `json:"remote_control_enabled"`
 }
 
 // PublicConfig is the sanitized configuration returned to the frontend.
@@ -38,6 +39,7 @@ type PublicConfig struct {
 	AgyBinaryPath         string `json:"agy_binary_path"`
 	PersistentIdleMinutes int    `json:"persistent_idle_minutes"`
 	AuthDisabled          bool   `json:"auth_disabled"`
+	RemoteControlEnabled  bool   `json:"remote_control_enabled"`
 	PasswordSet           bool   `json:"password_set"`
 	DataDir               string `json:"data_dir"`
 	HomeDir               string `json:"home_dir"`
@@ -160,6 +162,7 @@ func (s *Store) Public() PublicConfig {
 		AgyBinaryPath:         s.cfg.AgyBinaryPath,
 		PersistentIdleMinutes: s.cfg.PersistentIdleMinutes,
 		AuthDisabled:          s.cfg.AuthDisabled,
+		RemoteControlEnabled:  s.cfg.RemoteControlEnabled,
 		PasswordSet:           s.cfg.PasswordHash != "",
 		DataDir:               s.paths.DataDir,
 		HomeDir:               s.paths.HomeDir,

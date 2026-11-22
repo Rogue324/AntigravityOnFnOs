@@ -26,10 +26,22 @@ export interface AppSettings {
   agy_binary_path: string;
   persistent_idle_minutes: number;
   auth_disabled: boolean;
+  remote_control_enabled: boolean;
   password_set: boolean;
   data_dir: string;
   home_dir: string;
   bin_dir: string;
+}
+
+export interface RemoteControlStatus {
+  enabled: boolean;
+  running: boolean;
+  pid?: number;
+  state: 'stopped' | 'starting' | 'running' | 'restarting' | 'error';
+  started_at?: string;
+  restart_count: number;
+  last_error?: string;
+  logs: string[];
 }
 
 export interface AgyStatus {

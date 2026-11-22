@@ -93,6 +93,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/agy/models", s.requireAuth(s.handleAgyModels))
 	s.mux.HandleFunc("POST /api/agy/install", s.requireAuth(s.handleAgyInstall))
 
+	s.mux.HandleFunc("GET /api/remote-control/status", s.requireAuth(s.handleRemoteControlStatus))
+	s.mux.HandleFunc("POST /api/remote-control/restart", s.requireAuth(s.handleRemoteControlRestart))
+
 	s.mux.HandleFunc("GET /api/fs/browse", s.requireAuth(s.handleFSBrowse))
 
 	s.mux.HandleFunc("POST /api/uploads", s.requireAuth(s.handleUploadFile))
@@ -249,6 +252,7 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		AgyBinaryPath         *string `json:"agy_binary_path"`
 		PersistentIdleMinutes *int    `json:"persistent_idle_minutes"`
 		AuthDisabled          *bool   `json:"auth_disabled"`
+		RemoteControlEnabled  *bool   `json:"remote_control_enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "请求格式错误")
@@ -260,6 +264,7 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wasDisabled := s.authMgr.IsAuthDisabled()
+	prevCfg := s.cfgStore.Get()
 
 	err := s.cfgStore.Update(func(c *config.Config) {
 		if body.HTTPProxy != nil {
@@ -306,14 +311,30 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		if body.AuthDisabled != nil {
 			c.AuthDisabled = *body.AuthDisabled
 		}
+		if body.RemoteControlEnabled != nil {
+			c.RemoteControlEnabled = *body.RemoteControlEnabled
+		}
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if body.PersistentIdleMinutes != nil && *body.PersistentIdleMinutes == 0 {
-		s.agyMgr.CloseAll()
+		s.agyMgr.CloseChatPool()
 	}
+
+	nextCfg := s.cfgStore.Get()
+	if body.RemoteControlEnabled != nil && nextCfg.RemoteControlEnabled != prevCfg.RemoteControlEnabled {
+		s.agyMgr.SyncRemoteControl()
+	} else if nextCfg.RemoteControlEnabled &&
+		(nextCfg.HTTPProxy != prevCfg.HTTPProxy ||
+			nextCfg.HTTPSProxy != prevCfg.HTTPSProxy ||
+			nextCfg.NoProxy != prevCfg.NoProxy ||
+			nextCfg.AgyBinaryPath != prevCfg.AgyBinaryPath ||
+			nextCfg.DefaultWorkspace != prevCfg.DefaultWorkspace) {
+		s.agyMgr.RestartRemoteControl()
+	}
+
 	// If re-enabling password protection from passwordless mode, issue a fresh session cookie
 	// so the current browser remains authenticated.
 	if wasDisabled && body.AuthDisabled != nil && !*body.AuthDisabled {
@@ -322,6 +343,21 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, s.cfgStore.Public())
+}
+
+func (s *Server) handleRemoteControlStatus(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.agyMgr.RemoteControlStatus())
+}
+
+func (s *Server) handleRemoteControlRestart(w http.ResponseWriter, _ *http.Request) {
+	if !s.cfgStore.Get().RemoteControlEnabled {
+		writeError(w, http.StatusBadRequest, "远程控制未开启")
+		return
+	}
+	if !s.agyMgr.RestartRemoteControl() {
+		s.agyMgr.SyncRemoteControl()
+	}
+	writeJSON(w, http.StatusOK, s.agyMgr.RemoteControlStatus())
 }
 
 func (s *Server) handleTestProxy(w http.ResponseWriter, r *http.Request) {

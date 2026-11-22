@@ -8,6 +8,7 @@ import type {
   ChatSession,
   ModelOption,
   ProxyTestResult,
+  RemoteControlStatus,
   SessionSummary,
 } from '../types';
 
@@ -91,6 +92,12 @@ export const api = {
 
   agyStatus: () => request<AgyStatus>('/api/agy/status'),
   agyModels: () => request<{ models: ModelOption[]; error?: string }>('/api/agy/models'),
+
+  remoteControlStatus: () => request<RemoteControlStatus>('/api/remote-control/status'),
+  restartRemoteControl: () =>
+    request<RemoteControlStatus>('/api/remote-control/restart', {
+      method: 'POST',
+    }),
 
   browseFS: (path = '', hidden = false) =>
     request<BrowseResponse>(

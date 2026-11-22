@@ -11,9 +11,19 @@ import {
   FolderOpen,
   RefreshCw,
   Terminal,
+  Radio,
+  ExternalLink,
+  RotateCw,
 } from 'lucide-react';
 import { api, streamAgyInstall } from '../api/client';
-import type { AgyStatus, AppSettings, ModelOption, PermissionMode, ProxyTestResult } from '../types';
+import type {
+  AgyStatus,
+  AppSettings,
+  ModelOption,
+  PermissionMode,
+  ProxyTestResult,
+  RemoteControlStatus,
+} from '../types';
 import { DirPickerModal } from './DirPickerModal';
 
 interface SettingsViewProps {
@@ -62,6 +72,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  const [rcStatus, setRcStatus] = useState<RemoteControlStatus | null>(null);
+  const [rcBusy, setRcBusy] = useState(false);
+  const [rcMsg, setRcMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [showRcLogs, setShowRcLogs] = useState(false);
+
+  const fetchRcStatus = async () => {
+    try {
+      const st = await api.remoteControlStatus();
+      setRcStatus(st);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchRcStatus();
+  }, []);
+
+  useEffect(() => {
+    const active = settings?.remote_control_enabled || rcStatus?.enabled;
+    if (!active) return;
+    const timer = window.setInterval(() => {
+      fetchRcStatus();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [settings?.remote_control_enabled, rcStatus?.enabled]);
+
   useEffect(() => {
     if (!settings) return;
     setForm({
@@ -86,12 +123,49 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       onSettingsSaved(updated);
       const st = await api.agyStatus();
       onAgyStatusUpdated(st);
+      await fetchRcStatus();
       setSaveMsg('设置已保存并生效');
       setTimeout(() => setSaveMsg(''), 3000);
     } catch (err) {
       setSaveMsg(err instanceof Error ? err.message : '保存失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleRemoteControl = async (enabled: boolean) => {
+    setRcBusy(true);
+    setRcMsg(null);
+    try {
+      const updated = await api.updateSettings({ remote_control_enabled: enabled });
+      onSettingsSaved(updated);
+      const st = await api.remoteControlStatus();
+      setRcStatus(st);
+      if (enabled) setShowRcLogs(true);
+      setRcMsg({
+        ok: true,
+        text: enabled
+          ? '已开启后台常驻远程控制，关闭网页也不会断开'
+          : '已停止后台远程控制守护进程',
+      });
+    } catch (err) {
+      setRcMsg({ ok: false, text: err instanceof Error ? err.message : '操作失败' });
+    } finally {
+      setRcBusy(false);
+    }
+  };
+
+  const handleRestartRemoteControl = async () => {
+    setRcBusy(true);
+    setRcMsg(null);
+    try {
+      const st = await api.restartRemoteControl();
+      setRcStatus(st);
+      setRcMsg({ ok: true, text: '已重启后台远程控制服务' });
+    } catch (err) {
+      setRcMsg({ ok: false, text: err instanceof Error ? err.message : '重启失败' });
+    } finally {
+      setRcBusy(false);
     }
   };
 
@@ -313,6 +387,155 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 ))}
               </div>
               {installErr && <div className="mt-2 text-rose-400">{installErr}</div>}
+            </div>
+          )}
+        </section>
+
+        {/* 1.5. Official Remote Control Daemon */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/70">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Radio className="h-4 w-4 text-indigo-500 dark:text-indigo-400" />
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                官方远程控制（Remote Control 常驻服务）
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                  rcStatus?.running
+                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                    : rcStatus?.state === 'starting' || rcStatus?.state === 'restarting'
+                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+                      : rcStatus?.state === 'error'
+                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                }`}
+              >
+                {rcStatus?.running
+                  ? `运行中${rcStatus.pid ? ` (PID ${rcStatus.pid})` : ''}`
+                  : rcStatus?.state === 'starting'
+                    ? '启动中...'
+                    : rcStatus?.state === 'restarting'
+                      ? `自动重连中（已重试 ${rcStatus.restart_count} 次）`
+                      : rcStatus?.state === 'error'
+                        ? '运行异常'
+                        : '未开启'}
+              </span>
+              <button
+                type="button"
+                onClick={fetchRcStatus}
+                className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                <RefreshCw className="h-3 w-3" />
+                <span>刷新</span>
+              </button>
+            </div>
+          </div>
+
+          <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+            由后端直接托管常驻 <code className="font-mono">agy remote-control serve</code>
+            ，解决在 Web 终端里执行 <code className="font-mono">/remote-control</code>{' '}
+            切页面或关浏览器即断开的问题。自动继承本页的代理配置与登录凭据，异常退出自动拉起，开机随应用自启。
+          </p>
+
+          <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-950/60">
+            <div className="text-xs">
+              <div className="font-medium text-slate-800 dark:text-slate-200">
+                后台常驻远程控制守护进程
+              </div>
+              <div className="mt-0.5 text-slate-500 dark:text-slate-400">
+                开启后，在任意电脑或手机浏览器打开{' '}
+                <a
+                  href="https://antigravity.google.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                >
+                  <span>antigravity.google.com</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>{' '}
+                使用同一 Google 账号登录即可连接本台飞牛 NAS。
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {settings?.remote_control_enabled ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={rcBusy}
+                    onClick={handleRestartRemoteControl}
+                    className="flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <RotateCw className={`h-3.5 w-3.5 ${rcBusy ? 'animate-spin' : ''}`} />
+                    <span>重启服务</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={rcBusy}
+                    onClick={() => handleToggleRemoteControl(false)}
+                    className="rounded-xl border border-rose-300 bg-white px-3.5 py-2 text-xs font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-40 dark:border-rose-500/40 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                  >
+                    {rcBusy ? '处理中...' : '关闭远程控制'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={rcBusy || !agyStatus?.installed}
+                  onClick={() => handleToggleRemoteControl(true)}
+                  title={!agyStatus?.installed ? '请先在上方安装 agy CLI' : '开启后台常驻远程控制'}
+                  className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {rcBusy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Radio className="h-3.5 w-3.5" />
+                  )}
+                  <span>{rcBusy ? '启动中...' : '开启远程控制'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {rcStatus?.last_error && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+              最近异常：{rcStatus.last_error}
+            </div>
+          )}
+
+          {rcMsg && (
+            <div
+              className={`mt-2 text-xs ${
+                rcMsg.ok
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-rose-600 dark:text-rose-400'
+              }`}
+            >
+              {rcMsg.text}
+            </div>
+          )}
+
+          {rcStatus && rcStatus.logs && rcStatus.logs.length > 0 && (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => setShowRcLogs((v) => !v)}
+                className="text-xs font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400"
+              >
+                {showRcLogs ? '隐藏运行日志 ▲' : `查看运行日志（最近 ${rcStatus.logs.length} 行）▼`}
+              </button>
+              {showRcLogs && (
+                <div className="mt-2 rounded-xl border border-slate-200 bg-slate-900 p-3 font-mono text-[11px] dark:border-slate-800 dark:bg-black/70">
+                  <div className="max-h-48 space-y-0.5 overflow-y-auto text-slate-200">
+                    {rcStatus.logs.map((l, i) => (
+                      <div key={i} className="whitespace-pre-wrap break-all">
+                        {l}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>

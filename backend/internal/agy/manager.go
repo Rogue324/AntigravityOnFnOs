@@ -43,15 +43,51 @@ type ProxyTestResult struct {
 type Manager struct {
 	cfgStore   *config.Store
 	pool       *workerPool
+	rc         *remoteControlSupervisor
 	installMu  sync.Mutex
 	installing bool
 }
 
 func NewManager(cfgStore *config.Store) *Manager {
-	return &Manager{
+	m := &Manager{
 		cfgStore: cfgStore,
 		pool:     newWorkerPool(),
 	}
+	m.rc = newRemoteControlSupervisor(m)
+	return m
+}
+
+// StartBackgroundServices starts persistent background features configured by the user.
+func (m *Manager) StartBackgroundServices() {
+	m.SyncRemoteControl()
+}
+
+// SyncRemoteControl ensures the managed remote-control daemon matches the persisted config.
+func (m *Manager) SyncRemoteControl() {
+	if m.rc == nil {
+		return
+	}
+	if m.cfgStore.Get().RemoteControlEnabled {
+		m.rc.Start()
+	} else {
+		m.rc.Stop()
+	}
+}
+
+// RestartRemoteControl restarts the managed remote-control daemon if it is currently enabled.
+func (m *Manager) RestartRemoteControl() bool {
+	if m.rc == nil {
+		return false
+	}
+	return m.rc.Restart()
+}
+
+// RemoteControlStatus returns the live runtime state and recent logs of the remote-control daemon.
+func (m *Manager) RemoteControlStatus() RemoteControlStatus {
+	if m.rc == nil {
+		return RemoteControlStatus{State: "stopped", Logs: []string{}}
+	}
+	return m.rc.Status()
 }
 
 func (m *Manager) CloseSession(sessionID string) {
@@ -60,9 +96,18 @@ func (m *Manager) CloseSession(sessionID string) {
 	}
 }
 
+func (m *Manager) CloseChatPool() {
+	if m.pool != nil {
+		m.pool.closeAll()
+	}
+}
+
 func (m *Manager) CloseAll() {
 	if m.pool != nil {
 		m.pool.closeAll()
+	}
+	if m.rc != nil {
+		m.rc.Stop()
 	}
 }
 

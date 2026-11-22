@@ -52,6 +52,7 @@ func main() {
 
 	authMgr := auth.NewManager(cfgStore)
 	agyMgr := agy.NewManager(cfgStore)
+	agyMgr.StartBackgroundServices()
 	srv := server.New(cfgStore, authMgr, agyMgr, sessStore, *gatewayPrefix)
 
 	httpServer := &http.Server{
