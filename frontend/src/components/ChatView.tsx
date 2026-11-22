@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   Send,
@@ -39,6 +39,12 @@ import type {
   ToolCall,
 } from '../types';
 import { DirPickerModal } from './DirPickerModal';
+import { extractLocalFilePath, openPathInFnOS } from '../utils/fnosBridge';
+
+const markdownUrlTransform = (url: string): string => {
+  if (/^file:\/\//i.test(url)) return url;
+  return defaultUrlTransform(url);
+};
 
 interface SlashCommandItem {
   cmd: string;
@@ -244,6 +250,72 @@ export const ChatView: React.FC<ChatViewProps> = ({
       setSubmittingPermId(null);
     }
   };
+
+  const [fileToast, setFileToast] = useState<{ ok: boolean; text: string } | null>(null);
+  const fileToastTimerRef = useRef<number | null>(null);
+
+  const showFileToast = (ok: boolean, text: string) => {
+    setFileToast({ ok, text });
+    if (fileToastTimerRef.current) {
+      window.clearTimeout(fileToastTimerRef.current);
+    }
+    fileToastTimerRef.current = window.setTimeout(() => {
+      setFileToast(null);
+      fileToastTimerRef.current = null;
+    }, 3500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (fileToastTimerRef.current) {
+        window.clearTimeout(fileToastTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleOpenLocalFile = async (path: string, isDir: boolean) => {
+    const res = await openPathInFnOS(path, { isDir });
+    showFileToast(res.ok, res.message);
+  };
+
+  const markdownComponents = useMemo(
+    () => ({
+      a: ({
+        href,
+        children,
+        ...props
+      }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children?: React.ReactNode }) => {
+        const local = extractLocalFilePath(href);
+        if (local) {
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void handleOpenLocalFile(local.path, local.isDir);
+              }}
+              title={`点击用飞牛系统打开：${local.path}${local.lineRange ? ` (${local.lineRange})` : ''}`}
+              className="mx-0.5 inline-flex max-w-full cursor-pointer items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50/80 px-1.5 py-0.5 align-baseline font-mono text-[0.85em] text-indigo-700 transition hover:border-indigo-400 hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:border-indigo-400/60 dark:hover:bg-indigo-500/25"
+            >
+              {local.isDir ? (
+                <FolderOpen className="h-3 w-3 shrink-0 text-amber-500 dark:text-amber-400" />
+              ) : (
+                <FileText className="h-3 w-3 shrink-0 text-indigo-500 dark:text-indigo-400" />
+              )}
+              <span className="truncate">{children}</span>
+            </button>
+          );
+        }
+        return (
+          <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+            {children}
+          </a>
+        );
+      },
+    }),
+    []
+  );
 
   // Determine whether slash command popover should be shown
   const slashQuery = useMemo(() => {
@@ -796,7 +868,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
                     {msg.content ? (
                       <div className="chat-markdown min-w-0 overflow-x-auto">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          urlTransform={markdownUrlTransform}
+                          components={markdownComponents}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
                       </div>
                     ) : msg.id.startsWith('stream-') && !msg.error ? (
                       <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -900,6 +978,28 @@ export const ChatView: React.FC<ChatViewProps> = ({
           <div ref={bottomRef} />
         </div>
       </div>
+
+      {/* File link open feedback toast */}
+      {fileToast && (
+        <div className="shrink-0 px-3 pb-1.5 sm:px-4">
+          <div
+            className={`mx-auto flex max-w-4xl items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-xs ${
+              fileToast.ok
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+                : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
+            }`}
+          >
+            <span className="truncate font-mono">{fileToast.text}</span>
+            <button
+              type="button"
+              onClick={() => setFileToast(null)}
+              className="shrink-0 opacity-70 hover:opacity-100"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Input composer with Slash Command popover + File/Image upload */}
       <div className="shrink-0 border-t border-slate-200 bg-white/95 p-2.5 sm:p-4 dark:border-slate-800/90 dark:bg-slate-900/80">
