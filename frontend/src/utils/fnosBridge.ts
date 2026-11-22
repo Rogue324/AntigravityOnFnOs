@@ -133,13 +133,21 @@ export async function openPathInFnOS(
   const cleanPath = filePath.replace(/\/+$/, '') || '/';
   const app = await getTrimApp();
 
+  if (app && app.isStandaloneWeb && window.parent !== window) {
+    try {
+      await app.reconnectHost();
+    } catch {
+      // ignore reconnect failure
+    }
+  }
+
   if (!app || app.isStandaloneWeb) {
     const copied = await copyToClipboard(cleanPath);
     return {
       ok: false,
       mode: copied ? 'copied' : 'error',
       message: copied
-        ? `当前为独立浏览器访问，无法唤起飞牛宿主；已复制路径：${cleanPath}`
+        ? `未检测到飞牛宿主桥（需在飞牛桌面/App 内打开，且 fnOS ≥ 1.2.0401）；已复制路径：${cleanPath}`
         : `请在飞牛桌面或飞牛 App 内打开以直接预览文件：${cleanPath}`,
     };
   }
@@ -154,14 +162,16 @@ export async function openPathInFnOS(
         mode: 'folder',
         message: `已在飞牛文件管理中打开目录：${dir}`,
       };
-    } catch {
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn('[fnosBridge] openFileManager failed:', reason);
       const copied = await copyToClipboard(dir);
       return {
         ok: false,
         mode: copied ? 'copied' : 'error',
         message: copied
-          ? `飞牛宿主暂不支持定位该目录，已复制路径：${dir}`
-          : `无法唤起飞牛文件管理（需 fnOS 1.2.0401+）：${dir}`,
+          ? `飞牛宿主打开目录失败（${reason}），已复制路径：${dir}`
+          : `无法唤起飞牛文件管理（${reason}）：${dir}`,
       };
     }
   }
@@ -174,7 +184,9 @@ export async function openPathInFnOS(
       mode: 'file',
       message: `已在飞牛系统中打开：${cleanPath.split('/').pop() || cleanPath}`,
     };
-  } catch {
+  } catch (fileErr) {
+    const fileReason = fileErr instanceof Error ? fileErr.message : String(fileErr);
+    console.warn('[fnosBridge] openFile failed, trying openFileManager:', fileReason);
     // Fallback: open containing folder in fnOS File Manager.
     const parentDir = getParentDir(cleanPath);
     try {
@@ -184,14 +196,16 @@ export async function openPathInFnOS(
         mode: 'folder',
         message: `无法直接预览该文件，已打开所在目录：${parentDir}`,
       };
-    } catch {
+    } catch (dirErr) {
+      const dirReason = dirErr instanceof Error ? dirErr.message : String(dirErr);
+      console.warn('[fnosBridge] openFileManager fallback failed:', dirReason);
       const copied = await copyToClipboard(cleanPath);
       return {
         ok: false,
         mode: copied ? 'copied' : 'error',
         message: copied
-          ? `飞牛宿主暂不支持直接打开该路径，已复制路径：${cleanPath}`
-          : `无法在飞牛中打开该文件（需 fnOS 1.2.0401+）：${cleanPath}`,
+          ? `飞牛宿主暂不支持打开（${fileReason}），已复制路径：${cleanPath}`
+          : `无法在飞牛中打开该文件（${fileReason}）：${cleanPath}`,
       };
     }
   }
