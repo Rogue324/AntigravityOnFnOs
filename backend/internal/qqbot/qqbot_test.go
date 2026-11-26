@@ -251,3 +251,41 @@ func TestPresentPermissionPromptDualButtonsAndFallback(t *testing.T) {
 		t.Fatalf("expected second attempt to fall back to msg_type=0, got %+v", payloads[1])
 	}
 }
+
+func TestCallbackApprovalAndIntentFallback(t *testing.T) {
+	pr := &agy.PermissionRequest{
+		RequestID: "req-42",
+		Title:     "Edit file",
+		Options: []agy.PermissionOption{
+			{OptionID: "o1", Name: "Always", Kind: "allow_always"},
+			{OptionID: "o2", Name: "Once", Kind: "allow_once"},
+		},
+	}
+
+	kb := buildApprovalKeyboard(pr, true)
+	raw, _ := json.Marshal(kb)
+	s := string(raw)
+	if !strings.Contains(s, `"type":1`) || !strings.Contains(s, `"visited_label":"已通过"`) || !strings.Contains(s, `"visited_label":"已拒绝"`) || !strings.Contains(s, `"perm:req-42:2"`) {
+		t.Fatalf("unexpected callback keyboard json: %s", s)
+	}
+
+	reqID, choice, ok := parseApprovalCallbackData("perm:req-42:2", "")
+	if !ok || reqID != "req-42" || choice != "2" {
+		t.Fatalf("unexpected parseApprovalCallbackData result: reqID=%q choice=%q ok=%v", reqID, choice, ok)
+	}
+
+	// Gateway auto-downgrades intentInteraction on 4914 instead of fatal stop
+	var supported = true
+	runner := newGatewayRunner(nil, "sid-1", 10, gatewayCallbacks{
+		onInteractionSupport: func(v bool) { supported = v },
+	})
+	if fatal := runner.handleCloseCode(closeInsufficientIntents); fatal {
+		t.Fatal("expected first 4914 with useInteraction=true to downgrade non-fatally")
+	}
+	if supported || runner.useInteraction {
+		t.Fatal("expected interaction support to be disabled after 4914 downgrade")
+	}
+	if fatal := runner.handleCloseCode(closeInsufficientIntents); !fatal {
+		t.Fatal("expected second 4914 after downgrade to be fatal")
+	}
+}

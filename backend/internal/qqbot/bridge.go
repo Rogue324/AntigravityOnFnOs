@@ -332,7 +332,8 @@ func (b *bridge) presentPermissionPrompt(ctx context.Context, client *Client, co
 	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	keyboard := buildApprovalKeyboard(pr)
+	useCallback := b.mgr != nil && b.mgr.supportsInteractionCallback()
+	keyboard := buildApprovalKeyboard(pr, useCallback)
 	mdText := escapeQQMarkdown(buildApprovalText(pr, true))
 	if err := client.SendMarkdownWithKeyboard(sendCtx, msg.Kind, msg.TargetID(), msg.MessageID, mdText, keyboard, 0); err != nil {
 		if !isClientRejection(err) {
@@ -375,7 +376,7 @@ func buildApprovalText(pr *agy.PermissionRequest, withButtons bool) string {
 	return sb.String()
 }
 
-func buildApprovalKeyboard(pr *agy.PermissionRequest) map[string]any {
+func buildApprovalKeyboard(pr *agy.PermissionRequest, useCallback bool) map[string]any {
 	allowData := "1"
 	for i, opt := range pr.Options {
 		if opt.Kind == "allow_once" {
@@ -383,6 +384,25 @@ func buildApprovalKeyboard(pr *agy.PermissionRequest) map[string]any {
 			break
 		}
 	}
+
+	makeAction := func(choice string, tips string) map[string]any {
+		if useCallback {
+			return map[string]any{
+				"type":           1,
+				"permission":     map[string]any{"type": 2},
+				"data":           "perm:" + pr.RequestID + ":" + choice,
+				"unsupport_tips": tips,
+			}
+		}
+		return map[string]any{
+			"type":           2,
+			"permission":     map[string]any{"type": 2},
+			"data":           choice,
+			"enter":          true,
+			"unsupport_tips": tips,
+		}
+	}
+
 	return map[string]any{
 		"content": map[string]any{
 			"rows": []map[string]any{
@@ -392,16 +412,10 @@ func buildApprovalKeyboard(pr *agy.PermissionRequest) map[string]any {
 							"id": pr.RequestID + "_allow",
 							"render_data": map[string]any{
 								"label":         "允许",
-								"visited_label": "已允许",
+								"visited_label": "已通过",
 								"style":         1,
 							},
-							"action": map[string]any{
-								"type":           2,
-								"permission":     map[string]any{"type": 2},
-								"data":           allowData,
-								"enter":          true,
-								"unsupport_tips": "当前客户端不支持按钮，请直接回复 " + allowData + " 允许，或 0 拒绝。",
-							},
+							"action": makeAction(allowData, "当前客户端不支持按钮，请直接回复 "+allowData+" 允许，或 0 拒绝。"),
 						},
 						{
 							"id": pr.RequestID + "_reject",
@@ -410,19 +424,140 @@ func buildApprovalKeyboard(pr *agy.PermissionRequest) map[string]any {
 								"visited_label": "已拒绝",
 								"style":         0,
 							},
-							"action": map[string]any{
-								"type":           2,
-								"permission":     map[string]any{"type": 2},
-								"data":           "0",
-								"enter":          true,
-								"unsupport_tips": "当前客户端不支持按钮，请直接回复 0 拒绝，或 " + allowData + " 允许。",
-							},
+							"action": makeAction("0", "当前客户端不支持按钮，请直接回复 0 拒绝，或 "+allowData+" 允许。"),
 						},
 					},
 				},
 			},
 		},
 	}
+}
+
+// handleInteraction handles QQ INTERACTION_CREATE button callback events for permission approvals.
+func (b *bridge) handleInteraction(ctx context.Context, client *Client, ev InboundInteraction) {
+	cfg := b.mgr.getConfigCopy()
+	if !cfg.Enabled {
+		_ = client.AcknowledgeInteraction(ctx, ev.ID, 1)
+		return
+	}
+
+	if allowed, _ := b.checkAccess(cfg, InboundMessage{
+		Kind:        ev.Kind,
+		SenderID:    ev.SenderID,
+		GroupOpenID: ev.GroupOpenID,
+	}); !allowed {
+		_ = client.AcknowledgeInteraction(ctx, ev.ID, 4)
+		return
+	}
+
+	reqID, choice, ok := parseApprovalCallbackData(ev.ButtonData, ev.ButtonID)
+	if !ok {
+		_ = client.AcknowledgeInteraction(ctx, ev.ID, 1)
+		return
+	}
+
+	convKey := ev.ConversationKey()
+	b.mu.Lock()
+	pending, exists := b.approvals[convKey]
+	if !exists || pending == nil || (reqID != "" && pending.RequestID != reqID) {
+		b.mu.Unlock()
+		_ = client.AcknowledgeInteraction(ctx, ev.ID, 3)
+		return
+	}
+	decision, approved, _, matched := matchApprovalChoice(pending, choice)
+	if !matched {
+		b.mu.Unlock()
+		_ = client.AcknowledgeInteraction(ctx, ev.ID, 1)
+		return
+	}
+	delete(b.approvals, convKey)
+	b.mu.Unlock()
+
+	if err := b.mgr.agyMgr.ResolvePermission(pending.SessionID, pending.RequestID, decision); err != nil {
+		b.mgr.appendLog("[bridge] 回调按钮审批失败: %v", err)
+		_ = client.AcknowledgeInteraction(ctx, ev.ID, 1)
+		return
+	}
+
+	// ACK with code=0 so QQ switches the clicked button label to visited_label ("已通过" / "已拒绝").
+	ackCtx, ackCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := client.AcknowledgeInteraction(ackCtx, ev.ID, 0); err != nil {
+		b.mgr.appendLog("[bridge] 回执 INTERACTION_CREATE 失败: %v", err)
+	}
+	ackCancel()
+
+	// Also post a clear approval outcome line in chat.
+	notice := formatApprovalOutcome(pending.Title, approved)
+	sendCtx, sendCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer sendCancel()
+	_ = client.SendText(sendCtx, ev.Kind, ev.TargetID(), ev.MessageID, notice, 0)
+}
+
+func parseApprovalCallbackData(buttonData, buttonID string) (reqID string, choice string, ok bool) {
+	data := strings.TrimSpace(buttonData)
+	if strings.HasPrefix(data, "perm:") {
+		parts := strings.SplitN(strings.TrimPrefix(data, "perm:"), ":", 2)
+		if len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
+			return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), true
+		}
+	}
+	id := strings.TrimSpace(buttonID)
+	if strings.HasSuffix(id, "_allow") {
+		return strings.TrimSuffix(id, "_allow"), "allow", true
+	}
+	if strings.HasSuffix(id, "_reject") {
+		return strings.TrimSuffix(id, "_reject"), "0", true
+	}
+	return "", "", false
+}
+
+func matchApprovalChoice(pending *pendingApproval, raw string) (decision agy.PermissionDecision, approved bool, choiceLabel string, matched bool) {
+	norm := strings.ToLower(strings.TrimSpace(raw))
+	if norm == "" {
+		return agy.PermissionDecision{}, false, "", false
+	}
+	switch norm {
+	case "0", "n", "no", "取消", "拒绝", "reject", "cancel":
+		return agy.PermissionDecision{Cancelled: true}, false, "已拒绝", true
+	case "y", "yes", "同意", "允许", "allow":
+		if len(pending.Options) > 0 {
+			opt := pending.Options[0]
+			for _, candidate := range pending.Options {
+				if candidate.Kind == "allow_once" {
+					opt = candidate
+					break
+				}
+			}
+			label := opt.Name
+			if label == "" {
+				label = "已通过"
+			}
+			return agy.PermissionDecision{OptionID: opt.OptionID}, true, label, true
+		}
+		return agy.PermissionDecision{}, false, "", false
+	default:
+		if idx, err := strconv.Atoi(norm); err == nil && idx >= 1 && idx <= len(pending.Options) {
+			opt := pending.Options[idx-1]
+			label := opt.Name
+			if label == "" {
+				label = opt.Kind
+			}
+			isApproved := !strings.HasPrefix(opt.Kind, "reject")
+			return agy.PermissionDecision{OptionID: opt.OptionID}, isApproved, label, true
+		}
+		return agy.PermissionDecision{}, false, "", false
+	}
+}
+
+func formatApprovalOutcome(title string, approved bool) string {
+	status := "❌ 已拒绝审批"
+	if approved {
+		status = "✅ 已通过审批"
+	}
+	if strings.TrimSpace(title) != "" {
+		return status + "：" + title
+	}
+	return status
 }
 
 var qqMarkdownEscaper = strings.NewReplacer(
@@ -455,41 +590,7 @@ func (b *bridge) tryHandleApprovalReply(ctx context.Context, client *Client, con
 		return false
 	}
 
-	norm := strings.ToLower(strings.TrimSpace(text))
-	if norm == "" {
-		return false
-	}
-
-	var decision agy.PermissionDecision
-	matched := false
-	choiceLabel := ""
-
-	switch norm {
-	case "0", "n", "no", "取消", "拒绝", "reject", "cancel":
-		decision = agy.PermissionDecision{Cancelled: true}
-		choiceLabel = "已拒绝/取消"
-		matched = true
-	case "y", "yes", "同意", "允许", "allow":
-		if len(pending.Options) > 0 {
-			decision = agy.PermissionDecision{OptionID: pending.Options[0].OptionID}
-			choiceLabel = pending.Options[0].Name
-			if choiceLabel == "" {
-				choiceLabel = "已允许"
-			}
-			matched = true
-		}
-	default:
-		if idx, err := strconv.Atoi(norm); err == nil && idx >= 1 && idx <= len(pending.Options) {
-			opt := pending.Options[idx-1]
-			decision = agy.PermissionDecision{OptionID: opt.OptionID}
-			choiceLabel = opt.Name
-			if choiceLabel == "" {
-				choiceLabel = opt.Kind
-			}
-			matched = true
-		}
-	}
-
+	decision, approved, _, matched := matchApprovalChoice(pending, text)
 	if !matched {
 		return false
 	}
@@ -503,7 +604,7 @@ func (b *bridge) tryHandleApprovalReply(ctx context.Context, client *Client, con
 		return true
 	}
 
-	_ = client.SendText(ctx, msg.Kind, msg.TargetID(), msg.MessageID, "已提交审批选择："+choiceLabel, 0)
+	_ = client.SendText(ctx, msg.Kind, msg.TargetID(), msg.MessageID, formatApprovalOutcome(pending.Title, approved), 0)
 	return true
 }
 

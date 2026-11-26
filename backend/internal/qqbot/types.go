@@ -127,6 +127,31 @@ func (m InboundMessage) TargetID() string {
 	return m.SenderID
 }
 
+// InboundInteraction represents a QQ Bot INTERACTION_CREATE button callback event.
+type InboundInteraction struct {
+	ID          string
+	Kind        string // "c2c" | "group"
+	SenderID    string // user_openid or group_member_openid
+	GroupOpenID string
+	ButtonID    string
+	ButtonData  string
+	MessageID   string
+}
+
+func (i InboundInteraction) ConversationKey() string {
+	if i.Kind == "group" {
+		return "group:" + i.GroupOpenID
+	}
+	return "c2c:" + i.SenderID
+}
+
+func (i InboundInteraction) TargetID() string {
+	if i.Kind == "group" {
+		return i.GroupOpenID
+	}
+	return i.SenderID
+}
+
 func maskAppID(appID string) string {
 	if len(appID) <= 4 {
 		return appID

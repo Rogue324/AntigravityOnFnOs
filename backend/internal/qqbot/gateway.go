@@ -14,6 +14,7 @@ import (
 
 const (
 	intentGroupAndC2C = 1 << 25
+	intentInteraction = 1 << 26
 
 	opDispatch       = 0
 	opHeartbeat      = 1
@@ -78,32 +79,51 @@ type groupMessageEvent struct {
 	} `json:"author"`
 }
 
+type interactionEvent struct {
+	ID                string `json:"id"`
+	ChatType          int    `json:"chat_type"` // 1=group, 2=c2c
+	UserOpenID        string `json:"user_openid"`
+	GroupOpenID       string `json:"group_openid"`
+	GroupMemberOpenID string `json:"group_member_openid"`
+	Data              struct {
+		Resolved struct {
+			ButtonID   string `json:"button_id"`
+			ButtonData string `json:"button_data"`
+			MessageID  string `json:"message_id"`
+		} `json:"resolved"`
+	} `json:"data"`
+}
+
 type gatewayCallbacks struct {
-	onStateChange func(state string, lastErr string)
-	onReady       func(sessionID, botUserID, botUsername string)
-	onSessionSave func(sessionID string, lastSeq int64)
-	onMessage     func(msg InboundMessage)
-	log           func(string)
+	onStateChange        func(state string, lastErr string)
+	onReady              func(sessionID, botUserID, botUsername string)
+	onSessionSave        func(sessionID string, lastSeq int64)
+	onMessage            func(msg InboundMessage)
+	onInteraction        func(ev InboundInteraction)
+	onInteractionSupport func(supported bool)
+	log                  func(string)
 }
 
 type gatewayRunner struct {
 	client *Client
 	cb     gatewayCallbacks
 
-	mu           sync.Mutex
-	sessionID    string
-	lastSeq      int64
-	hasSeq       bool
-	refreshToken bool
+	mu             sync.Mutex
+	sessionID      string
+	lastSeq        int64
+	hasSeq         bool
+	refreshToken   bool
+	useInteraction bool
 }
 
 func newGatewayRunner(client *Client, savedSessionID string, savedLastSeq int64, cb gatewayCallbacks) *gatewayRunner {
 	return &gatewayRunner{
-		client:    client,
-		cb:        cb,
-		sessionID: savedSessionID,
-		lastSeq:   savedLastSeq,
-		hasSeq:    savedSessionID != "" && savedLastSeq > 0,
+		client:         client,
+		cb:             cb,
+		sessionID:      savedSessionID,
+		lastSeq:        savedLastSeq,
+		hasSeq:         savedSessionID != "" && savedLastSeq > 0,
+		useInteraction: true,
 	}
 }
 
@@ -286,6 +306,10 @@ func (g *gatewayRunner) connectOnce(ctx context.Context) (connectedAt time.Time,
 			canResume := g.sessionID != "" && g.hasSeq
 			sid := g.sessionID
 			seq := g.lastSeq
+			intents := intentGroupAndC2C
+			if g.useInteraction {
+				intents |= intentInteraction
+			}
 			g.mu.Unlock()
 
 			var authFrame map[string]any
@@ -303,7 +327,7 @@ func (g *gatewayRunner) connectOnce(ctx context.Context) (connectedAt time.Time,
 					"op": opIdentify,
 					"d": map[string]any{
 						"token":   "QQBot " + token,
-						"intents": intentGroupAndC2C,
+						"intents": intents,
 						"shard":   []int{0, 1},
 					},
 				}
@@ -346,9 +370,13 @@ func (g *gatewayRunner) connectOnce(ctx context.Context) (connectedAt time.Time,
 					g.mu.Lock()
 					g.sessionID = ready.SessionID
 					seq := g.lastSeq
+					interactionEnabled := g.useInteraction
 					g.mu.Unlock()
 					connectedAt = time.Now()
-					g.log("[gateway] 已就绪: bot=%s (%s)", ready.User.Username, ready.User.ID)
+					g.log("[gateway] 已就绪: bot=%s (%s, callback=%v)", ready.User.Username, ready.User.ID, interactionEnabled)
+					if g.cb.onInteractionSupport != nil {
+						g.cb.onInteractionSupport(interactionEnabled)
+					}
 					if g.cb.onSessionSave != nil {
 						g.cb.onSessionSave(ready.SessionID, seq)
 					}
@@ -393,6 +421,28 @@ func (g *gatewayRunner) connectOnce(ctx context.Context) (connectedAt time.Time,
 						})
 					}
 				}
+
+			case "INTERACTION_CREATE":
+				var ev interactionEvent
+				if err := json.Unmarshal(payload.D, &ev); err == nil {
+					kind := "c2c"
+					senderID := ev.UserOpenID
+					if ev.ChatType == 1 || ev.GroupOpenID != "" {
+						kind = "group"
+						senderID = ev.GroupMemberOpenID
+					}
+					if g.cb.onInteraction != nil {
+						go g.cb.onInteraction(InboundInteraction{
+							ID:          ev.ID,
+							Kind:        kind,
+							SenderID:    senderID,
+							GroupOpenID: ev.GroupOpenID,
+							ButtonID:    ev.Data.Resolved.ButtonID,
+							ButtonData:  ev.Data.Resolved.ButtonData,
+							MessageID:   ev.Data.Resolved.MessageID,
+						})
+					}
+				}
 			}
 
 		case opHeartbeatACK:
@@ -434,6 +484,20 @@ func (g *gatewayRunner) handleCloseCode(code int) (fatal bool) {
 		g.clearSession(true)
 		return true
 	case closeInsufficientIntents, closeDisallowedIntents:
+		g.mu.Lock()
+		wasUsingInteraction := g.useInteraction
+		if wasUsingInteraction {
+			g.useInteraction = false
+		}
+		g.mu.Unlock()
+		if wasUsingInteraction {
+			g.log("[gateway] 机器人未开通 INTERACTION 回调权限 (%d)，自动降级为基础消息模式重连", code)
+			if g.cb.onInteractionSupport != nil {
+				g.cb.onInteractionSupport(false)
+			}
+			g.clearSession(false)
+			return false
+		}
 		g.clearSession(false)
 		return true
 	case closeInvalidSession, closeSeqOutOfRange, closeSessionTimeout:

@@ -30,15 +30,16 @@ type Manager struct {
 	qrClient   *QRClient
 	bridge     *bridge
 
-	mu              sync.Mutex
-	cfg             BotConfig
-	state           BotState
-	connectionState string
-	botUserID       string
-	botUsername     string
-	lastConnectedAt time.Time
-	lastError       string
-	logs            []string
+	mu                  sync.Mutex
+	cfg                 BotConfig
+	state               BotState
+	connectionState     string
+	botUserID           string
+	botUsername         string
+	lastConnectedAt     time.Time
+	lastError           string
+	logs                []string
+	supportsInteraction bool
 
 	runCancel context.CancelFunc
 	runDone   chan struct{}
@@ -52,13 +53,14 @@ type Manager struct {
 func NewManager(cfgStore *config.Store, agyMgr *agy.Manager, sessStore *session.Store) (*Manager, error) {
 	dataDir := cfgStore.Paths().DataDir
 	m := &Manager{
-		cfgStore:        cfgStore,
-		agyMgr:          agyMgr,
-		sessStore:       sessStore,
-		configFile:      filepath.Join(dataDir, "qqbot.json"),
-		stateFile:       filepath.Join(dataDir, "qqbot_state.json"),
-		qrClient:        NewQRClient(nil),
-		connectionState: "idle",
+		cfgStore:            cfgStore,
+		agyMgr:              agyMgr,
+		sessStore:           sessStore,
+		configFile:          filepath.Join(dataDir, "qqbot.json"),
+		stateFile:           filepath.Join(dataDir, "qqbot_state.json"),
+		qrClient:            NewQRClient(nil),
+		connectionState:     "idle",
+		supportsInteraction: true,
 		cfg: BotConfig{
 			AllowC2C:   true,
 			AllowGroup: false,
@@ -115,6 +117,7 @@ func (m *Manager) Start() {
 	m.runDone = done
 	m.connectionState = "connecting"
 	m.lastError = ""
+	m.supportsInteraction = true
 	client := NewClient(appID, appSecret, nil, func(line string) {
 		m.appendLog("%s", line)
 	})
@@ -153,6 +156,14 @@ func (m *Manager) Start() {
 		onMessage: func(msg InboundMessage) {
 			m.bridge.handleInbound(ctx, client, msg)
 		},
+		onInteraction: func(ev InboundInteraction) {
+			m.bridge.handleInteraction(ctx, client, ev)
+		},
+		onInteractionSupport: func(supported bool) {
+			m.mu.Lock()
+			m.supportsInteraction = supported
+			m.mu.Unlock()
+		},
 		log: func(line string) {
 			m.appendLog("%s", line)
 		},
@@ -162,6 +173,12 @@ func (m *Manager) Start() {
 		defer close(done)
 		runner.run(ctx)
 	}()
+}
+
+func (m *Manager) supportsInteractionCallback() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.supportsInteraction
 }
 
 // Stop disconnects the active QQ bot WebSocket gateway.

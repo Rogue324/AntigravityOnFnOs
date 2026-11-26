@@ -306,6 +306,17 @@ func (c *Client) SendMarkdownWithKeyboard(ctx context.Context, scope, targetID, 
 	return c.doAPI(ctx, http.MethodPost, messagePath(scope, targetID), body, nil)
 }
 
+// AcknowledgeInteraction acknowledges a QQ INTERACTION_CREATE button click (code: 0=success, 1=failed, 3=duplicate, 4=no permission).
+func (c *Client) AcknowledgeInteraction(ctx context.Context, interactionID string, code int) error {
+	interactionID = strings.TrimSpace(interactionID)
+	if interactionID == "" {
+		return nil
+	}
+	return c.doAPI(ctx, http.MethodPut, fmt.Sprintf("/interactions/%s", interactionID), map[string]int{
+		"code": code,
+	}, nil)
+}
+
 // SendMarkdown sends a markdown message (msg_type=2).
 func (c *Client) SendMarkdown(ctx context.Context, scope, targetID, msgID, markdownContent string, msgSeq int) error {
 	markdownContent = strings.TrimSpace(markdownContent)
