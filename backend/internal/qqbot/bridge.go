@@ -31,11 +31,12 @@ var (
 )
 
 type pendingApproval struct {
-	SessionID string
-	RequestID string
-	Title     string
-	Options   []agy.PermissionOption
-	CreatedAt time.Time
+	SessionID       string
+	RequestID       string
+	Title           string
+	PromptMessageID string
+	Options         []agy.PermissionOption
+	CreatedAt       time.Time
 }
 
 type activeTurn struct {
@@ -332,10 +333,12 @@ func (b *bridge) presentPermissionPrompt(ctx context.Context, client *Client, co
 	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	useCallback := b.mgr != nil && b.mgr.supportsInteractionCallback()
-	keyboard := buildApprovalKeyboard(pr, useCallback)
+	// Use action.type=2 (enter: true) because QQ Open Platform requires a public HTTPS Webhook URL
+	// for action.type=1 callbacks on WebSocket-only bots (otherwise QQ shows "第三方请求失败").
+	keyboard := buildApprovalKeyboard(pr, false)
 	mdText := escapeQQMarkdown(buildApprovalText(pr, true))
-	if err := client.SendMarkdownWithKeyboard(sendCtx, msg.Kind, msg.TargetID(), msg.MessageID, mdText, keyboard, 0); err != nil {
+	sentID, err := client.SendMarkdownWithKeyboard(sendCtx, msg.Kind, msg.TargetID(), msg.MessageID, mdText, keyboard, 0)
+	if err != nil {
 		if !isClientRejection(err) {
 			b.mgr.appendLog("[bridge] 发送权限审批按钮消息失败: %v", err)
 			return
@@ -344,6 +347,14 @@ func (b *bridge) presentPermissionPrompt(ctx context.Context, client *Client, co
 		if fallbackErr := client.SendText(sendCtx, msg.Kind, msg.TargetID(), msg.MessageID, plainText, 0); fallbackErr != nil {
 			b.mgr.appendLog("[bridge] 发送纯文本权限审批提示失败: %v", fallbackErr)
 		}
+		return
+	}
+	if sentID != "" {
+		b.mu.Lock()
+		if cur, ok := b.approvals[convKey]; ok && cur != nil && cur.RequestID == pr.RequestID {
+			cur.PromptMessageID = sentID
+		}
+		b.mu.Unlock()
 	}
 }
 
@@ -602,6 +613,14 @@ func (b *bridge) tryHandleApprovalReply(ctx context.Context, client *Client, con
 	if err := b.mgr.agyMgr.ResolvePermission(pending.SessionID, pending.RequestID, decision); err != nil {
 		_ = client.SendText(ctx, msg.Kind, msg.TargetID(), msg.MessageID, "审批处理失败（可能已超时或已在 Web 端处理）："+err.Error(), 0)
 		return true
+	}
+
+	if pending.PromptMessageID != "" {
+		recallCtx, recallCancel := context.WithTimeout(ctx, 8*time.Second)
+		if err := client.RecallMessage(recallCtx, msg.Kind, msg.TargetID(), pending.PromptMessageID); err != nil {
+			b.mgr.appendLog("[bridge] 撤回旧审批消息失败（忽略）: %v", err)
+		}
+		recallCancel()
 	}
 
 	_ = client.SendText(ctx, msg.Kind, msg.TargetID(), msg.MessageID, formatApprovalOutcome(pending.Title, approved), 0)

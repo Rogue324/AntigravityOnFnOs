@@ -280,11 +280,11 @@ func isClientRejection(err error) bool {
 	return apiErr.HTTPStatus >= 400 && apiErr.HTTPStatus < 500 && apiErr.HTTPStatus != http.StatusTooManyRequests
 }
 
-// SendMarkdownWithKeyboard sends a markdown message (msg_type=2) with inline keyboard buttons.
-func (c *Client) SendMarkdownWithKeyboard(ctx context.Context, scope, targetID, msgID, markdownContent string, keyboard any, msgSeq int) error {
+// SendMarkdownWithKeyboard sends a markdown message (msg_type=2) with inline keyboard buttons and returns the sent message ID.
+func (c *Client) SendMarkdownWithKeyboard(ctx context.Context, scope, targetID, msgID, markdownContent string, keyboard any, msgSeq int) (string, error) {
 	markdownContent = strings.TrimSpace(markdownContent)
 	if markdownContent == "" {
-		return nil
+		return "", nil
 	}
 	if msgSeq <= 0 {
 		msgSeq = nextMsgSeqSeed()
@@ -303,7 +303,23 @@ func (c *Client) SendMarkdownWithKeyboard(ctx context.Context, scope, targetID, 
 	if msgID != "" {
 		body["msg_id"] = msgID
 	}
-	return c.doAPI(ctx, http.MethodPost, messagePath(scope, targetID), body, nil)
+	var resp struct {
+		ID string `json:"id"`
+	}
+	if err := c.doAPI(ctx, http.MethodPost, messagePath(scope, targetID), body, &resp); err != nil {
+		return "", err
+	}
+	return resp.ID, nil
+}
+
+// RecallMessage recalls (deletes) a previously sent C2C or Group message.
+func (c *Client) RecallMessage(ctx context.Context, scope, targetID, messageID string) error {
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" || strings.TrimSpace(targetID) == "" {
+		return nil
+	}
+	path := fmt.Sprintf("%s/%s", messagePath(scope, targetID), messageID)
+	return c.doAPI(ctx, http.MethodDelete, path, nil, nil)
 }
 
 // AcknowledgeInteraction acknowledges a QQ INTERACTION_CREATE button click (code: 0=success, 1=failed, 3=duplicate, 4=no permission).
