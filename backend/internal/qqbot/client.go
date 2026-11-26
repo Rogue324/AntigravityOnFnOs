@@ -272,6 +272,40 @@ func (c *Client) SendText(ctx context.Context, scope, targetID, msgID, text stri
 	return c.doAPI(ctx, http.MethodPost, messagePath(scope, targetID), body, nil)
 }
 
+func isClientRejection(err error) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.HTTPStatus >= 400 && apiErr.HTTPStatus < 500 && apiErr.HTTPStatus != http.StatusTooManyRequests
+}
+
+// SendMarkdownWithKeyboard sends a markdown message (msg_type=2) with inline keyboard buttons.
+func (c *Client) SendMarkdownWithKeyboard(ctx context.Context, scope, targetID, msgID, markdownContent string, keyboard any, msgSeq int) error {
+	markdownContent = strings.TrimSpace(markdownContent)
+	if markdownContent == "" {
+		return nil
+	}
+	if msgSeq <= 0 {
+		msgSeq = nextMsgSeqSeed()
+		if msgSeq == 0 {
+			msgSeq = 1
+		}
+	}
+	body := map[string]any{
+		"msg_type": 2,
+		"markdown": map[string]string{
+			"content": markdownContent,
+		},
+		"keyboard": keyboard,
+		"msg_seq":  msgSeq,
+	}
+	if msgID != "" {
+		body["msg_id"] = msgID
+	}
+	return c.doAPI(ctx, http.MethodPost, messagePath(scope, targetID), body, nil)
+}
+
 // SendMarkdown sends a markdown message (msg_type=2).
 func (c *Client) SendMarkdown(ctx context.Context, scope, targetID, msgID, markdownContent string, msgSeq int) error {
 	markdownContent = strings.TrimSpace(markdownContent)

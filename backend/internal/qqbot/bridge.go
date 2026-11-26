@@ -167,7 +167,8 @@ func (b *bridge) handleInbound(ctx context.Context, client *Client, msg InboundM
 		}
 		if titleSrc != "" {
 			if updated, err := b.mgr.sessStore.Update(sess.ID, func(cur *session.Session) {
-				cur.Title = "[QQ] " + truncateString(titleSrc, 24)
+				cur.Title = truncateString(titleSrc, 28)
+				cur.Channel = "qq"
 			}); err == nil {
 				sess = updated
 			}
@@ -327,6 +328,25 @@ func (b *bridge) presentPermissionPrompt(ctx context.Context, client *Client, co
 	}
 	b.mu.Unlock()
 
+	plainText := buildApprovalText(pr, false)
+	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	keyboard := buildApprovalKeyboard(pr)
+	mdText := escapeQQMarkdown(buildApprovalText(pr, true))
+	if err := client.SendMarkdownWithKeyboard(sendCtx, msg.Kind, msg.TargetID(), msg.MessageID, mdText, keyboard, 0); err != nil {
+		if !isClientRejection(err) {
+			b.mgr.appendLog("[bridge] 发送权限审批按钮消息失败: %v", err)
+			return
+		}
+		b.mgr.appendLog("[bridge] 平台不支持按钮/Markdown 审批消息，自动降级为纯文本回复: %v", err)
+		if fallbackErr := client.SendText(sendCtx, msg.Kind, msg.TargetID(), msg.MessageID, plainText, 0); fallbackErr != nil {
+			b.mgr.appendLog("[bridge] 发送纯文本权限审批提示失败: %v", fallbackErr)
+		}
+	}
+}
+
+func buildApprovalText(pr *agy.PermissionRequest, withButtons bool) string {
 	var sb strings.Builder
 	sb.WriteString("【需要权限审批】\n")
 	if pr.Title != "" {
@@ -339,7 +359,11 @@ func (b *bridge) presentPermissionPrompt(ctx context.Context, client *Client, co
 		sb.WriteString(truncateString(strings.TrimSpace(pr.Input), 300))
 		sb.WriteByte('\n')
 	}
-	sb.WriteString("\n请直接回复序号确认：\n")
+	if withButtons {
+		sb.WriteString("\n请点击下方按钮确认，或直接回复序号：\n")
+	} else {
+		sb.WriteString("\n请直接回复序号确认：\n")
+	}
 	for i, opt := range pr.Options {
 		label := opt.Name
 		if label == "" {
@@ -348,12 +372,79 @@ func (b *bridge) presentPermissionPrompt(ctx context.Context, client *Client, co
 		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, label))
 	}
 	sb.WriteString("0. 取消 / 拒绝")
+	return sb.String()
+}
 
-	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	if err := client.SendText(sendCtx, msg.Kind, msg.TargetID(), msg.MessageID, sb.String(), 0); err != nil {
-		b.mgr.appendLog("[bridge] 发送权限审批提示失败: %v", err)
+func buildApprovalKeyboard(pr *agy.PermissionRequest) map[string]any {
+	allowData := "1"
+	for i, opt := range pr.Options {
+		if opt.Kind == "allow_once" {
+			allowData = strconv.Itoa(i + 1)
+			break
+		}
 	}
+	return map[string]any{
+		"content": map[string]any{
+			"rows": []map[string]any{
+				{
+					"buttons": []map[string]any{
+						{
+							"id": pr.RequestID + "_allow",
+							"render_data": map[string]any{
+								"label":         "允许",
+								"visited_label": "已允许",
+								"style":         1,
+							},
+							"action": map[string]any{
+								"type":           2,
+								"permission":     map[string]any{"type": 2},
+								"data":           allowData,
+								"enter":          true,
+								"unsupport_tips": "当前客户端不支持按钮，请直接回复 " + allowData + " 允许，或 0 拒绝。",
+							},
+						},
+						{
+							"id": pr.RequestID + "_reject",
+							"render_data": map[string]any{
+								"label":         "拒绝",
+								"visited_label": "已拒绝",
+								"style":         0,
+							},
+							"action": map[string]any{
+								"type":           2,
+								"permission":     map[string]any{"type": 2},
+								"data":           "0",
+								"enter":          true,
+								"unsupport_tips": "当前客户端不支持按钮，请直接回复 0 拒绝，或 " + allowData + " 允许。",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+var qqMarkdownEscaper = strings.NewReplacer(
+	`\`, `\\`,
+	"`", "\\`",
+	`*`, `\*`,
+	`_`, `\_`,
+	`{`, `\{`,
+	`}`, `\}`,
+	`[`, `\[`,
+	`]`, `\]`,
+	`(`, `\(`,
+	`)`, `\)`,
+	`<`, `\<`,
+	`>`, `\>`,
+	`#`, `\#`,
+	`|`, `\|`,
+	`!`, `\!`,
+)
+
+func escapeQQMarkdown(s string) string {
+	return qqMarkdownEscaper.Replace(s)
 }
 
 func (b *bridge) tryHandleApprovalReply(ctx context.Context, client *Client, convKey string, msg InboundMessage, text string) bool {
@@ -467,9 +558,9 @@ func (b *bridge) handleSlashCommand(ctx context.Context, client *Client, convKey
 			reply("当前会话正在执行任务，请先发送 /stop 停止后再开启新会话。")
 			return
 		}
-		title := "[QQ] 新对话"
+		title := "新对话"
 		if arg != "" {
-			title = "[QQ] " + truncateString(arg, 24)
+			title = truncateString(arg, 28)
 		}
 		ws := firstNonEmpty(cfg.Workspace, globalCfg.DefaultWorkspace)
 		model := firstNonEmpty(cfg.Model, globalCfg.DefaultModel)
@@ -480,6 +571,11 @@ func (b *bridge) handleSlashCommand(ctx context.Context, client *Client, convKey
 		if err != nil {
 			reply("创建新会话失败：" + err.Error())
 			return
+		}
+		if updated, err := b.mgr.sessStore.Update(sess.ID, func(cur *session.Session) {
+			cur.Channel = "qq"
+		}); err == nil {
+			sess = updated
 		}
 		b.mgr.setConversationSession(convKey, sess.ID)
 		reply(fmt.Sprintf("已开启新会话：%s\n工作区：%s\n权限模式：%s", sess.Title, sess.Workspace, sess.PermissionMode))
@@ -627,16 +723,21 @@ func (b *bridge) getOrCreateSession(convKey string, cfg BotConfig, firstText str
 	effort := firstNonEmpty(cfg.Effort, globalCfg.DefaultEffort)
 	perm := firstNonEmpty(cfg.PermissionMode, globalCfg.DefaultPermissionMode, "default")
 
-	title := "[QQ] 新对话"
+	title := "新对话"
 	if firstText != "" {
-		title = "[QQ] " + truncateString(firstText, 24)
+		title = truncateString(firstText, 28)
 	} else if hasAtt {
-		title = "[QQ] 附件对话"
+		title = "附件对话"
 	}
 
 	sess, err := b.mgr.sessStore.Create(title, ws, nil, model, effort, perm)
 	if err != nil {
 		return nil, err
+	}
+	if updated, err := b.mgr.sessStore.Update(sess.ID, func(cur *session.Session) {
+		cur.Channel = "qq"
+	}); err == nil {
+		sess = updated
 	}
 	b.mgr.setConversationSession(convKey, sess.ID)
 	return sess, nil

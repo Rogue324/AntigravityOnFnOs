@@ -177,6 +177,7 @@ export interface ChatMessage {
 export interface SessionSummary {
   id: string;
   title: string;
+  channel?: string;
   conversation_id?: string;
   workspace: string;
   extra_dirs?: string[];
@@ -191,6 +192,7 @@ export interface SessionSummary {
 export interface ChatSession {
   id: string;
   title: string;
+  channel?: string;
   conversation_id?: string;
   workspace: string;
   extra_dirs?: string[];

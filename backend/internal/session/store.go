@@ -52,6 +52,7 @@ type Message struct {
 type Session struct {
 	ID             string    `json:"id"`
 	Title          string    `json:"title"`
+	Channel        string    `json:"channel,omitempty"`
 	ConversationID string    `json:"conversation_id,omitempty"`
 	Workspace      string    `json:"workspace"`
 	ExtraDirs      []string  `json:"extra_dirs,omitempty"`
@@ -67,6 +68,7 @@ type Session struct {
 type Summary struct {
 	ID             string    `json:"id"`
 	Title          string    `json:"title"`
+	Channel        string    `json:"channel,omitempty"`
 	ConversationID string    `json:"conversation_id,omitempty"`
 	Workspace      string    `json:"workspace"`
 	ExtraDirs      []string  `json:"extra_dirs,omitempty"`
@@ -104,6 +106,7 @@ func (s *Store) List() []Summary {
 		list = append(list, Summary{
 			ID:             sess.ID,
 			Title:          sess.Title,
+			Channel:        sess.Channel,
 			ConversationID: sess.ConversationID,
 			Workspace:      sess.Workspace,
 			ExtraDirs:      append([]string(nil), sess.ExtraDirs...),

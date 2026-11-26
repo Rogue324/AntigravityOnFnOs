@@ -193,3 +193,61 @@ func TestManagerConfigPersistence(t *testing.T) {
 	var called atomic.Int32
 	_ = called
 }
+
+func TestPresentPermissionPromptDualButtonsAndFallback(t *testing.T) {
+	var payloads []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/app/getAppAccessToken":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "tok-btn",
+				"expires_in":   "7200",
+			})
+		case "/v2/users/u-1/messages":
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			payloads = append(payloads, body)
+			if int(body["msg_type"].(float64)) == 2 {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{"code": 40034090, "message": "keyboard not allowed"})
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "ok"})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewClient("10001", "sec", srv.Client(), nil)
+	c.tokenBaseURL = srv.URL
+	c.apiBaseURL = srv.URL
+
+	mgr := &Manager{}
+	b := newBridge(mgr)
+	b.presentPermissionPrompt(context.Background(), c, "c2c:u-1", InboundMessage{
+		Kind:      "c2c",
+		SenderID:  "u-1",
+		MessageID: "in-99",
+	}, &agy.PermissionRequest{
+		SessionID: "sess-1",
+		RequestID: "req-1",
+		Title:     "Run shell command",
+		Input:     "ls -la",
+		Options: []agy.PermissionOption{
+			{OptionID: "opt-always", Name: "Always Allow", Kind: "allow_always"},
+			{OptionID: "opt-once", Name: "Allow Once", Kind: "allow_once"},
+		},
+	})
+
+	if len(payloads) != 2 {
+		t.Fatalf("expected 2 attempts (keyboard + plain fallback), got %d", len(payloads))
+	}
+	if int(payloads[0]["msg_type"].(float64)) != 2 || payloads[0]["keyboard"] == nil {
+		t.Fatalf("expected first attempt to send msg_type=2 with keyboard, got %+v", payloads[0])
+	}
+	if int(payloads[1]["msg_type"].(float64)) != 0 {
+		t.Fatalf("expected second attempt to fall back to msg_type=0, got %+v", payloads[1])
+	}
+}

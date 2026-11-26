@@ -32,6 +32,21 @@ interface SidebarProps {
   onCloseMobile: () => void;
 }
 
+const QQPenguinIcon: React.FC<{ className?: string }> = ({ className = 'h-4 w-4' }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    aria-label="QQ 会话"
+  >
+    <path
+      d="M12 2.2C8.35 2.2 6.45 4.85 6.45 8.15C6.45 8.85 6.55 9.5 6.72 10.1C5.4 11.45 4.25 13.5 4.25 15.35C4.25 16.45 4.78 16.95 5.38 16.65C5.9 16.4 6.32 15.7 6.6 15.05C6.9 16.25 7.5 17.3 8.38 18.08C7.42 18.52 6.65 19.22 6.65 19.95C6.65 20.78 7.82 21.35 9.5 21.35C10.55 21.35 11.42 21.05 12 20.62C12.58 21.05 13.45 21.35 14.5 21.35C16.18 21.35 17.35 20.78 17.35 19.95C17.35 19.22 16.58 18.52 15.62 18.08C16.5 17.3 17.1 16.25 17.4 15.05C17.68 15.7 18.1 16.4 18.62 16.65C19.22 16.95 19.75 16.45 19.75 15.35C19.75 13.5 18.6 11.45 17.28 10.1C17.45 9.5 17.55 8.85 17.55 8.15C17.55 4.85 15.65 2.2 12 2.2Z"
+      fill="#12B7F5"
+    />
+  </svg>
+);
+
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onSelectTab,
@@ -131,6 +146,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ) : (
           sessions.map((sess) => {
             const isSelected = activeTab === 'chat' && sess.id === activeSessionId;
+            const rawTitle = sess.title || '新对话';
+            const isQQSession = sess.channel === 'qq' || rawTitle.startsWith('[QQ] ');
+            const displayTitle = isQQSession ? rawTitle.replace(/^\[QQ\]\s*/, '') || '新对话' : rawTitle;
             return (
               <div
                 key={sess.id}
@@ -145,7 +163,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }`}
               >
                 <div className="min-w-0 flex-1 pr-2">
-                  <div className="truncate font-medium">{sess.title || '新对话'}</div>
+                  <div className="flex items-center gap-1.5">
+                    {isQQSession && (
+                      <span title="QQ 机器人会话" className="shrink-0">
+                        <QQPenguinIcon className="h-3.5 w-3.5" />
+                      </span>
+                    )}
+                    <div className="truncate font-medium">{displayTitle}</div>
+                  </div>
                   <div className="truncate text-[10px] text-slate-400 dark:text-slate-500">
                     {sess.workspace}
                   </div>
