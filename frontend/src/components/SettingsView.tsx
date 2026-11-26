@@ -25,6 +25,7 @@ import type {
   RemoteControlStatus,
 } from '../types';
 import { DirPickerModal } from './DirPickerModal';
+import { QQBotSettingsCard } from './QQBotSettingsCard';
 
 interface SettingsViewProps {
   settings: AppSettings | null;
@@ -539,6 +540,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           )}
         </section>
+
+        {/* 1.8. QQ Bot Integration */}
+        <QQBotSettingsCard models={models} defaultWorkspace={form.default_workspace} />
 
         {/* 2. Network Proxy */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/70">

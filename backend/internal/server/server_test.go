@@ -10,6 +10,7 @@ import (
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/agy"
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/auth"
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/config"
+	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/qqbot"
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/session"
 )
 
@@ -31,7 +32,12 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("session.NewStore: %v", err)
 	}
-	return New(cfgStore, auth.NewManager(cfgStore), agy.NewManager(cfgStore), sessStore, "/app/antigravity-cli")
+	agyMgr := agy.NewManager(cfgStore)
+	qqMgr, err := qqbot.NewManager(cfgStore, agyMgr, sessStore)
+	if err != nil {
+		t.Fatalf("qqbot.NewManager: %v", err)
+	}
+	return New(cfgStore, auth.NewManager(cfgStore), agyMgr, sessStore, qqMgr, "/app/antigravity-cli")
 }
 
 func TestAuthSettingsAndSessionsFlow(t *testing.T) {
@@ -139,5 +145,35 @@ func TestAuthSettingsAndSessionsFlow(t *testing.T) {
 	}
 	if srv.authMgr.ConsumeWSTicket(ticketResp.Ticket) {
 		t.Fatalf("expected second ConsumeWSTicket to fail (single-use)")
+	}
+
+	// 7. QQ bot status & config update routes
+	req = httptest.NewRequest(http.MethodGet, "/api/qqbot/status", nil)
+	req.AddCookie(sessionCookie)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for GET /api/qqbot/status, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var qqSt qqbot.Status
+	if err := json.NewDecoder(rec.Body).Decode(&qqSt); err != nil {
+		t.Fatalf("decode qqbot status: %v", err)
+	}
+	if qqSt.Config.Configured || qqSt.ConnectionState != "idle" {
+		t.Fatalf("expected initial qqbot unbound/idle, got %+v", qqSt)
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/qqbot/config", bytes.NewBufferString(`{"restrict_to_owner":true,"allowed_users":["openid-a"]}`))
+	req.AddCookie(sessionCookie)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for PUT /api/qqbot/config, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&qqSt); err != nil {
+		t.Fatalf("decode updated qqbot status: %v", err)
+	}
+	if !qqSt.Config.RestrictToOwner || len(qqSt.Config.AllowedUsers) != 1 || qqSt.Config.AllowedUsers[0] != "openid-a" {
+		t.Fatalf("unexpected updated qqbot config: %+v", qqSt.Config)
 	}
 }

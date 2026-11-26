@@ -15,6 +15,7 @@ import (
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/auth"
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/config"
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/fsapi"
+	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/qqbot"
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/session"
 )
 
@@ -23,18 +24,20 @@ type Server struct {
 	authMgr       *auth.Manager
 	agyMgr        *agy.Manager
 	sessStore     *session.Store
+	qqMgr         *qqbot.Manager
 	gatewayPrefix string
 	upgrader      websocket.Upgrader
 	mux           *http.ServeMux
 }
 
-func New(cfgStore *config.Store, authMgr *auth.Manager, agyMgr *agy.Manager, sessStore *session.Store, gatewayPrefix string) *Server {
+func New(cfgStore *config.Store, authMgr *auth.Manager, agyMgr *agy.Manager, sessStore *session.Store, qqMgr *qqbot.Manager, gatewayPrefix string) *Server {
 	prefix := strings.TrimRight(strings.TrimSpace(gatewayPrefix), "/")
 	s := &Server{
 		cfgStore:      cfgStore,
 		authMgr:       authMgr,
 		agyMgr:        agyMgr,
 		sessStore:     sessStore,
+		qqMgr:         qqMgr,
 		gatewayPrefix: prefix,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  8192,
@@ -95,6 +98,8 @@ func (s *Server) registerRoutes() {
 
 	s.mux.HandleFunc("GET /api/remote-control/status", s.requireAuth(s.handleRemoteControlStatus))
 	s.mux.HandleFunc("POST /api/remote-control/restart", s.requireAuth(s.handleRemoteControlRestart))
+
+	s.registerQQBotRoutes()
 
 	s.mux.HandleFunc("GET /api/fs/browse", s.requireAuth(s.handleFSBrowse))
 

@@ -44,6 +44,63 @@ export interface RemoteControlStatus {
   logs: string[];
 }
 
+export interface QQBotPublicConfig {
+  configured: boolean;
+  enabled: boolean;
+  app_id: string;
+  app_id_masked: string;
+  has_app_secret: boolean;
+  owner_user_openid?: string;
+  workspace?: string;
+  model?: string;
+  effort?: string;
+  permission_mode?: string;
+  allow_c2c: boolean;
+  allow_group: boolean;
+  restrict_to_owner: boolean;
+  allowed_users: string[];
+  allowed_groups: string[];
+  created_at?: string;
+  connected_at?: string;
+}
+
+export interface QQBotQRStatus {
+  attempt_id: string;
+  status: 'idle' | 'starting' | 'pending' | 'refreshing' | 'connecting' | 'connected' | 'failed' | 'cancelled';
+  qr_revision: number;
+  verification_url?: string;
+  expires_at?: number;
+  error?: string;
+  poll_interval_ms: number;
+}
+
+export interface QQBotStatus {
+  config: QQBotPublicConfig;
+  connection_state: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error';
+  connected: boolean;
+  bot_username?: string;
+  bot_user_id?: string;
+  last_connected_at?: string;
+  last_error?: string;
+  can_send_test: boolean;
+  qr?: QQBotQRStatus;
+  logs: string[];
+}
+
+export interface QQBotConfigPatch {
+  enabled?: boolean;
+  owner_user_openid?: string;
+  workspace?: string;
+  model?: string;
+  effort?: string;
+  permission_mode?: string;
+  allow_c2c?: boolean;
+  allow_group?: boolean;
+  restrict_to_owner?: boolean;
+  allowed_users?: string[];
+  allowed_groups?: string[];
+}
+
 export interface AgyStatus {
   installed: boolean;
   binary_path: string;

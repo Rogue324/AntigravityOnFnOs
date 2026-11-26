@@ -8,6 +8,9 @@ import type {
   ChatSession,
   ModelOption,
   ProxyTestResult,
+  QQBotConfigPatch,
+  QQBotQRStatus,
+  QQBotStatus,
   RemoteControlStatus,
   SessionSummary,
 } from '../types';
@@ -96,6 +99,40 @@ export const api = {
   remoteControlStatus: () => request<RemoteControlStatus>('/api/remote-control/status'),
   restartRemoteControl: () =>
     request<RemoteControlStatus>('/api/remote-control/restart', {
+      method: 'POST',
+    }),
+
+  qqBotStatus: () => request<QQBotStatus>('/api/qqbot/status'),
+  updateQQBotConfig: (patch: QQBotConfigPatch) =>
+    request<QQBotStatus>('/api/qqbot/config', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    }),
+  bindQQBot: (payload: { app_id: string; app_secret: string; owner_user_openid?: string }) =>
+    request<QQBotStatus>('/api/qqbot/bind', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  unbindQQBot: () =>
+    request<QQBotStatus>('/api/qqbot/unbind', {
+      method: 'POST',
+    }),
+  restartQQBot: () =>
+    request<QQBotStatus>('/api/qqbot/restart', {
+      method: 'POST',
+    }),
+  testQQBot: (text?: string) =>
+    request<{ ok: boolean }>('/api/qqbot/test', {
+      method: 'POST',
+      body: JSON.stringify({ text: text ?? '' }),
+    }),
+  startQQBotQR: () =>
+    request<QQBotQRStatus>('/api/qqbot/qr/start', {
+      method: 'POST',
+    }),
+  getQQBotQRStatus: () => request<QQBotQRStatus>('/api/qqbot/qr/status'),
+  cancelQQBotQR: () =>
+    request<QQBotQRStatus>('/api/qqbot/qr/cancel', {
       method: 'POST',
     }),
 

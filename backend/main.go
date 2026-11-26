@@ -15,6 +15,7 @@ import (
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/agy"
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/auth"
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/config"
+	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/qqbot"
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/server"
 	"github.com/Rogue324/AntigravityOnFnOs/backend/internal/session"
 )
@@ -53,7 +54,12 @@ func main() {
 	authMgr := auth.NewManager(cfgStore)
 	agyMgr := agy.NewManager(cfgStore)
 	agyMgr.StartBackgroundServices()
-	srv := server.New(cfgStore, authMgr, agyMgr, sessStore, *gatewayPrefix)
+	qqMgr, err := qqbot.NewManager(cfgStore, agyMgr, sessStore)
+	if err != nil {
+		log.Fatalf("failed to initialize qqbot manager: %v", err)
+	}
+	qqMgr.StartBackground()
+	srv := server.New(cfgStore, authMgr, agyMgr, sessStore, qqMgr, *gatewayPrefix)
 
 	httpServer := &http.Server{
 		Handler:           srv,
@@ -98,6 +104,7 @@ func main() {
 	<-stop
 
 	log.Println("Shutting down Antigravity for fnOS...")
+	qqMgr.Close()
 	agyMgr.CloseAll()
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
